@@ -2,37 +2,783 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Save, Trash2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import {
+  ChevronDown,
+  ChevronUp,
+  FolderPlus,
+  Plus,
+  Save,
+  Trash2,
+} from "lucide-react";
+
 import { estimateTotals, money } from "@/lib/money";
+import { createClient } from "@/lib/supabase/client";
 import type { EstimateItemDraft } from "@/lib/types";
 
-const blankItem = (markup = 20): EstimateItemDraft => ({ item_type:"material", category:"", description:"", quantity:1, unit:"each", unit_cost:0, markup_rate:markup, taxable:true, vendor:"", vendor_sku:"", vendor_url:"", private_notes:"" });
+type CustomerOption = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  company_name: string | null;
+};
 
-export function EstimateBuilder({ customers, defaults, selectedCustomer }: { customers:any[]; defaults:{ tax_rate:number; markup_rate:number }; selectedCustomer?:string }) {
-  const router = useRouter(); const supabase = createClient();
-  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
-  const [customerId,setCustomerId]=useState(selectedCustomer??""); const [title,setTitle]=useState(""); const [address,setAddress]=useState("");
-  const [scope,setScope]=useState(""); const [exclusions,setExclusions]=useState(""); const [notes,setNotes]=useState(""); const [privateNotes,setPrivateNotes]=useState(""); const [schedule,setSchedule]=useState("30% deposit to reserve scheduling; progress payments tied to completed phases; final balance due at final walkthrough.");
-  const [taxRate,setTaxRate]=useState(Number(defaults.tax_rate||0)); const [markupRate,setMarkupRate]=useState(Number(defaults.markup_rate||20));
-  const [items,setItems]=useState<EstimateItemDraft[]>([blankItem(Number(defaults.markup_rate||20))]);
-  const totals=useMemo(()=>estimateTotals(items,taxRate),[items,taxRate]);
-  function patch(index:number, values:Partial<EstimateItemDraft>){ setItems(current=>current.map((item,i)=>i===index?{...item,...values}:item)); }
-  function addItem(){setItems(current=>[...current,blankItem(markupRate)]);} function removeItem(index:number){setItems(current=>current.filter((_,i)=>i!==index));}
-  async function save(){
-    setError(""); if(!customerId||!title.trim()){setError("Choose a customer and enter a project title.");return;} if(!items.some(i=>i.description.trim())){setError("Add at least one line item.");return;}
-    setBusy(true); const {data:{user}}=await supabase.auth.getUser(); if(!user){setError("Your session expired. Sign in again.");setBusy(false);return;}
-    const {data:estimate,error:estimateError}=await supabase.from("estimates").insert({owner_id:user.id,customer_id:customerId,title,project_address:address||null,scope:scope||null,exclusions:exclusions||null,customer_notes:notes||null,private_notes:privateNotes||null,payment_schedule:schedule||null,tax_rate:taxRate,default_markup_rate:markupRate,subtotal:totals.subtotal,markup_total:totals.markupTotal,tax_total:totals.taxTotal,total:totals.total}).select("id").single();
-    if(estimateError||!estimate){setError(estimateError?.message||"Could not save estimate.");setBusy(false);return;}
-    const rows=items.filter(i=>i.description.trim()).map((item,index)=>({owner_id:user.id,estimate_id:estimate.id,sort_order:index,...item,line_subtotal:item.quantity*item.unit_cost,line_markup:item.quantity*item.unit_cost*(item.markup_rate/100),line_total:item.quantity*item.unit_cost*(1+item.markup_rate/100)}));
-    const {error:itemError}=await supabase.from("estimate_items").insert(rows); if(itemError){setError(itemError.message);setBusy(false);return;}
-    router.push(`/estimates/${estimate.id}`); router.refresh();
+type EstimateBuilderProps = {
+  customers: CustomerOption[];
+  defaults: {
+    tax_rate: number;
+    markup_rate: number;
+  };
+  selectedCustomer?: string;
+};
+
+type EstimateSectionDraft = {
+  clientId: string;
+  title: string;
+  description: string;
+  items: EstimateItemDraft[];
+};
+
+function makeId() {
+  return crypto.randomUUID();
+}
+
+function blankItem(markup = 20): EstimateItemDraft {
+  return {
+    item_type: "material",
+    category: "",
+    description: "",
+    quantity: 1,
+    unit: "each",
+    unit_cost: 0,
+    markup_rate: markup,
+    taxable: true,
+    vendor: "",
+    vendor_sku: "",
+    vendor_url: "",
+    private_notes: "",
+  };
+}
+
+function blankSection(title = "General", markup = 20): EstimateSectionDraft {
+  return {
+    clientId: makeId(),
+    title,
+    description: "",
+    items: [blankItem(markup)],
+  };
+}
+
+export function EstimateBuilder({
+  customers,
+  defaults,
+  selectedCustomer,
+}: EstimateBuilderProps) {
+  const router = useRouter();
+  const supabase = createClient();
+
+  const startingMarkup = Number(defaults.markup_rate || 20);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [customerId, setCustomerId] = useState(selectedCustomer ?? "");
+  const [title, setTitle] = useState("");
+  const [address, setAddress] = useState("");
+  const [scope, setScope] = useState("");
+  const [exclusions, setExclusions] = useState("");
+  const [notes, setNotes] = useState("");
+  const [privateNotes, setPrivateNotes] = useState("");
+  const [schedule, setSchedule] = useState(
+    "30% deposit to reserve scheduling; progress payments tied to completed phases; final balance due at final walkthrough.",
+  );
+  const [taxRate, setTaxRate] = useState(Number(defaults.tax_rate || 0));
+  const [markupRate, setMarkupRate] = useState(startingMarkup);
+  const [sections, setSections] = useState<EstimateSectionDraft[]>([
+    blankSection("General", startingMarkup),
+  ]);
+
+  const allItems = useMemo(
+    () => sections.flatMap((section) => section.items),
+    [sections],
+  );
+
+  const totals = useMemo(
+    () => estimateTotals(allItems, taxRate),
+    [allItems, taxRate],
+  );
+
+  function patchSection(
+    sectionId: string,
+    values: Partial<Pick<EstimateSectionDraft, "title" | "description">>,
+  ) {
+    setSections((current) =>
+      current.map((section) =>
+        section.clientId === sectionId ? { ...section, ...values } : section,
+      ),
+    );
   }
-  return <div className="builder-layout"><div className="builder-main">
-    <section className="panel form-grid"><label className="span-2">Customer<select value={customerId} onChange={e=>setCustomerId(e.target.value)} required><option value="">Choose a customer…</option>{customers.map(c=><option key={c.id} value={c.id}>{c.first_name} {c.last_name}{c.company_name?` — ${c.company_name}`:""}</option>)}</select></label><label className="span-2">Project title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Primary bathroom remodel" /></label><label className="span-2">Project address<input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Use the customer's address or enter another jobsite" /></label></section>
-    <section className="panel"><div className="panel-heading"><div><h2>Pricing</h2><p>Materials, labor, subcontractors, allowances, fees, and other costs.</p></div><button className="button button--outline" type="button" onClick={addItem}><Plus size={16}/> Add line</button></div>
-      <div className="item-list">{items.map((item,index)=><article className="line-item" key={index}><div className="line-item-top"><select value={item.item_type} onChange={e=>patch(index,{item_type:e.target.value as any})}><option value="material">Material</option><option value="labor">Labor</option><option value="subcontractor">Subcontractor</option><option value="allowance">Allowance</option><option value="fee">Fee</option><option value="other">Other</option></select><input className="grow" value={item.description} onChange={e=>patch(index,{description:e.target.value})} placeholder="Description"/><button type="button" className="icon-button danger" onClick={()=>removeItem(index)} aria-label="Remove"><Trash2 size={17}/></button></div><div className="line-item-grid"><label>Category<input value={item.category} onChange={e=>patch(index,{category:e.target.value})}/></label><label>Qty<input type="number" min="0" step="0.01" value={item.quantity} onChange={e=>patch(index,{quantity:Number(e.target.value)})}/></label><label>Unit<input value={item.unit} onChange={e=>patch(index,{unit:e.target.value})}/></label><label>Unit cost<input type="number" min="0" step="0.01" value={item.unit_cost} onChange={e=>patch(index,{unit_cost:Number(e.target.value)})}/></label><label>Markup %<input type="number" min="0" step="0.1" value={item.markup_rate} onChange={e=>patch(index,{markup_rate:Number(e.target.value)})}/></label><label className="checkbox"><input type="checkbox" checked={item.taxable} onChange={e=>patch(index,{taxable:e.target.checked})}/> Taxable</label><label>Vendor<input value={item.vendor} onChange={e=>patch(index,{vendor:e.target.value})} placeholder="Lowe's"/></label><label>SKU / item #<input value={item.vendor_sku} onChange={e=>patch(index,{vendor_sku:e.target.value})}/></label><label className="span-2">Vendor URL<input value={item.vendor_url} onChange={e=>patch(index,{vendor_url:e.target.value})}/></label><label className="span-2">Private line note<input value={item.private_notes} onChange={e=>patch(index,{private_notes:e.target.value})} placeholder="Not shown to customer"/></label></div><div className="line-total">Customer price: <strong>{money(item.quantity*item.unit_cost*(1+item.markup_rate/100))}</strong></div></article>)}</div>
-    </section>
-    <section className="panel form-grid"><label className="span-2">Detailed scope of work<textarea rows={10} value={scope} onChange={e=>setScope(e.target.value)} placeholder="Describe exactly what Ironwood will provide and perform."/></label><label className="span-2">Exclusions and owner-supplied items<textarea rows={5} value={exclusions} onChange={e=>setExclusions(e.target.value)}/></label><label className="span-2">Customer-facing notes<textarea rows={4} value={notes} onChange={e=>setNotes(e.target.value)}/></label><label className="span-2">Payment schedule<textarea rows={4} value={schedule} onChange={e=>setSchedule(e.target.value)}/></label><label className="span-2">Private Ironwood notes<textarea rows={4} value={privateNotes} onChange={e=>setPrivateNotes(e.target.value)} placeholder="Never shown on the customer proposal."/></label></section>
-  </div><aside className="builder-summary panel"><h2>Estimate total</h2><label>Default markup %<input type="number" value={markupRate} onChange={e=>setMarkupRate(Number(e.target.value))}/></label><label>Sales tax %<input type="number" value={taxRate} onChange={e=>setTaxRate(Number(e.target.value))}/></label><dl className="totals"><div><dt>Base cost</dt><dd>{money(totals.subtotal)}</dd></div><div><dt>Markup</dt><dd>{money(totals.markupTotal)}</dd></div><div><dt>Tax</dt><dd>{money(totals.taxTotal)}</dd></div><div className="grand"><dt>Total</dt><dd>{money(totals.total)}</dd></div></dl>{error&&<p className="error-box">{error}</p>}<button onClick={save} disabled={busy} className="button button--gold button--block"><Save size={17}/>{busy?"Saving…":"Save estimate"}</button><p className="fine-print">Private notes and raw cost details stay inside Ironwood.</p></aside></div>;
+
+  function addSection() {
+    setSections((current) => [
+      ...current,
+      blankSection(`Section ${current.length + 1}`, markupRate),
+    ]);
+  }
+
+  function removeSection(sectionId: string) {
+    setSections((current) => {
+      if (current.length === 1) return current;
+      return current.filter((section) => section.clientId !== sectionId);
+    });
+  }
+
+  function moveSection(sectionIndex: number, direction: -1 | 1) {
+    setSections((current) => {
+      const nextIndex = sectionIndex + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+
+      const copy = [...current];
+      const [moved] = copy.splice(sectionIndex, 1);
+      copy.splice(nextIndex, 0, moved);
+      return copy;
+    });
+  }
+
+  function patchItem(
+    sectionId: string,
+    itemIndex: number,
+    values: Partial<EstimateItemDraft>,
+  ) {
+    setSections((current) =>
+      current.map((section) => {
+        if (section.clientId !== sectionId) return section;
+
+        return {
+          ...section,
+          items: section.items.map((item, index) =>
+            index === itemIndex ? { ...item, ...values } : item,
+          ),
+        };
+      }),
+    );
+  }
+
+  function addItem(sectionId: string) {
+    setSections((current) =>
+      current.map((section) =>
+        section.clientId === sectionId
+          ? {
+              ...section,
+              items: [...section.items, blankItem(markupRate)],
+            }
+          : section,
+      ),
+    );
+  }
+
+  function removeItem(sectionId: string, itemIndex: number) {
+    setSections((current) =>
+      current.map((section) => {
+        if (section.clientId !== sectionId) return section;
+
+        return {
+          ...section,
+          items: section.items.filter((_, index) => index !== itemIndex),
+        };
+      }),
+    );
+  }
+
+  function applyMarkupToAll() {
+    setSections((current) =>
+      current.map((section) => ({
+        ...section,
+        items: section.items.map((item) => ({
+          ...item,
+          markup_rate: markupRate,
+        })),
+      })),
+    );
+  }
+
+  async function save() {
+    setError("");
+
+    if (!customerId || !title.trim()) {
+      setError("Choose a customer and enter a project title.");
+      return;
+    }
+
+    const sectionsWithItems = sections.filter((section) =>
+      section.items.some((item) => item.description.trim()),
+    );
+
+    if (sectionsWithItems.length === 0) {
+      setError("Add at least one completed line item.");
+      return;
+    }
+
+    if (sectionsWithItems.some((section) => !section.title.trim())) {
+      setError("Every section containing line items needs a title.");
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("Your session expired. Sign in again.");
+        return;
+      }
+
+      const { data: estimate, error: estimateError } = await supabase
+        .from("estimates")
+        .insert({
+          owner_id: user.id,
+          customer_id: customerId,
+          title: title.trim(),
+          project_address: address.trim() || null,
+          scope: scope.trim() || null,
+          exclusions: exclusions.trim() || null,
+          customer_notes: notes.trim() || null,
+          private_notes: privateNotes.trim() || null,
+          payment_schedule: schedule.trim() || null,
+          tax_rate: taxRate,
+          default_markup_rate: markupRate,
+          subtotal: totals.subtotal,
+          markup_total: totals.markupTotal,
+          tax_total: totals.taxTotal,
+          total: totals.total,
+        })
+        .select("id")
+        .single();
+
+      if (estimateError || !estimate) {
+        setError(estimateError?.message || "Could not save the estimate.");
+        return;
+      }
+
+      const sectionRows = sectionsWithItems.map((section, index) => ({
+        owner_id: user.id,
+        estimate_id: estimate.id,
+        title: section.title.trim(),
+        description: section.description.trim() || null,
+        sort_order: index,
+      }));
+
+      const { data: savedSections, error: sectionError } = await supabase
+        .from("estimate_sections")
+        .insert(sectionRows)
+        .select("id, sort_order");
+
+      if (sectionError || !savedSections) {
+        await supabase.from("estimates").delete().eq("id", estimate.id);
+        setError(sectionError?.message || "Could not save estimate sections.");
+        return;
+      }
+
+      const sectionIdByOrder = new Map<number, string>(
+        savedSections.map((section) => [
+          Number(section.sort_order),
+          String(section.id),
+        ]),
+      );
+
+      const itemRows = sectionsWithItems.flatMap((section, sectionIndex) =>
+        section.items
+          .filter((item) => item.description.trim())
+          .map((item, itemIndex) => {
+            const baseCost = item.quantity * item.unit_cost;
+            const lineMarkup = baseCost * (item.markup_rate / 100);
+
+            return {
+              owner_id: user.id,
+              estimate_id: estimate.id,
+              section_id: sectionIdByOrder.get(sectionIndex),
+              sort_order: itemIndex,
+              item_type: item.item_type,
+              category: item.category.trim() || null,
+              description: item.description.trim(),
+              quantity: item.quantity,
+              unit: item.unit.trim() || "each",
+              unit_cost: item.unit_cost,
+              markup_rate: item.markup_rate,
+              taxable: item.taxable,
+              vendor: item.vendor.trim() || null,
+              vendor_sku: item.vendor_sku.trim() || null,
+              vendor_url: item.vendor_url.trim() || null,
+              private_notes: item.private_notes.trim() || null,
+              line_subtotal: baseCost,
+              line_markup: lineMarkup,
+              line_total: baseCost + lineMarkup,
+            };
+          }),
+      );
+
+      const { error: itemError } = await supabase
+        .from("estimate_items")
+        .insert(itemRows);
+
+      if (itemError) {
+        await supabase.from("estimates").delete().eq("id", estimate.id);
+        setError(itemError.message);
+        return;
+      }
+
+      router.push(`/estimates/${estimate.id}`);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="builder-layout">
+      <div className="builder-main">
+        <section className="panel form-grid">
+          <label className="span-2">
+            Customer
+            <select
+              value={customerId}
+              onChange={(event) => setCustomerId(event.target.value)}
+              required
+            >
+              <option value="">Choose a customer…</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.first_name} {customer.last_name}
+                  {customer.company_name ? ` — ${customer.company_name}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="span-2">
+            Project title
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Primary bathroom remodel"
+            />
+          </label>
+
+          <label className="span-2">
+            Project address
+            <input
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              placeholder="Use the customer address or enter another jobsite"
+            />
+          </label>
+        </section>
+
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Estimate sections</h2>
+              <p>
+                Organize the job into phases such as demolition, framing,
+                plumbing, electrical, drywall, and finishes.
+              </p>
+            </div>
+
+            <button
+              className="button button--outline"
+              type="button"
+              onClick={addSection}
+            >
+              <FolderPlus size={17} />
+              Add section
+            </button>
+          </div>
+
+          <div className="item-list">
+            {sections.map((section, sectionIndex) => (
+              <article className="estimate-section-card" key={section.clientId}>
+                <div className="estimate-section-heading">
+                  <div className="estimate-section-order">
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="Move section up"
+                      disabled={sectionIndex === 0}
+                      onClick={() => moveSection(sectionIndex, -1)}
+                    >
+                      <ChevronUp size={17} />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="Move section down"
+                      disabled={sectionIndex === sections.length - 1}
+                      onClick={() => moveSection(sectionIndex, 1)}
+                    >
+                      <ChevronDown size={17} />
+                    </button>
+                  </div>
+
+                  <div className="estimate-section-title">
+                    <input
+                      value={section.title}
+                      onChange={(event) =>
+                        patchSection(section.clientId, {
+                          title: event.target.value,
+                        })
+                      }
+                      placeholder="Section title"
+                    />
+
+                    <input
+                      value={section.description}
+                      onChange={(event) =>
+                        patchSection(section.clientId, {
+                          description: event.target.value,
+                        })
+                      }
+                      placeholder="Optional customer-facing section description"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="icon-button danger"
+                    aria-label="Remove section"
+                    disabled={sections.length === 1}
+                    onClick={() => removeSection(section.clientId)}
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+
+                <div className="item-list estimate-section-items">
+                  {section.items.map((item, itemIndex) => (
+                    <article
+                      className="line-item"
+                      key={`${section.clientId}-${itemIndex}`}
+                    >
+                      <div className="line-item-top">
+                        <select
+                          value={item.item_type}
+                          onChange={(event) =>
+                            patchItem(section.clientId, itemIndex, {
+                              item_type: event.target
+                                .value as EstimateItemDraft["item_type"],
+                            })
+                          }
+                        >
+                          <option value="material">Material</option>
+                          <option value="labor">Labor</option>
+                          <option value="subcontractor">Subcontractor</option>
+                          <option value="allowance">Allowance</option>
+                          <option value="fee">Fee</option>
+                          <option value="other">Other</option>
+                        </select>
+
+                        <input
+                          className="grow"
+                          value={item.description}
+                          onChange={(event) =>
+                            patchItem(section.clientId, itemIndex, {
+                              description: event.target.value,
+                            })
+                          }
+                          placeholder="Customer-facing description"
+                        />
+
+                        <button
+                          type="button"
+                          className="icon-button danger"
+                          aria-label="Remove line item"
+                          onClick={() =>
+                            removeItem(section.clientId, itemIndex)
+                          }
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+
+                      <div className="line-item-grid">
+                        <label>
+                          Category
+                          <input
+                            value={item.category}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                category: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+
+                        <label>
+                          Qty
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.quantity}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                quantity: Number(event.target.value),
+                              })
+                            }
+                          />
+                        </label>
+
+                        <label>
+                          Unit
+                          <input
+                            value={item.unit}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                unit: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+
+                        <label>
+                          Unit cost
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.unit_cost}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                unit_cost: Number(event.target.value),
+                              })
+                            }
+                          />
+                        </label>
+
+                        <label>
+                          Markup %
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={item.markup_rate}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                markup_rate: Number(event.target.value),
+                              })
+                            }
+                          />
+                        </label>
+
+                        <label className="checkbox">
+                          <input
+                            type="checkbox"
+                            checked={item.taxable}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                taxable: event.target.checked,
+                              })
+                            }
+                          />
+                          Taxable
+                        </label>
+
+                        <label>
+                          Vendor
+                          <input
+                            value={item.vendor}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                vendor: event.target.value,
+                              })
+                            }
+                            placeholder="Lowe's"
+                          />
+                        </label>
+
+                        <label>
+                          SKU / item #
+                          <input
+                            value={item.vendor_sku}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                vendor_sku: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+
+                        <label className="span-2">
+                          Vendor URL
+                          <input
+                            value={item.vendor_url}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                vendor_url: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+
+                        <label className="span-2">
+                          Private line note
+                          <input
+                            value={item.private_notes}
+                            onChange={(event) =>
+                              patchItem(section.clientId, itemIndex, {
+                                private_notes: event.target.value,
+                              })
+                            }
+                            placeholder="Not shown to customer"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="line-total">
+                        Customer price:{" "}
+                        <strong>
+                          {money(
+                            item.quantity *
+                              item.unit_cost *
+                              (1 + item.markup_rate / 100),
+                          )}
+                        </strong>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                <button
+                  className="button button--outline"
+                  type="button"
+                  onClick={() => addItem(section.clientId)}
+                >
+                  <Plus size={16} />
+                  Add line to {section.title || "section"}
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel form-grid">
+          <label className="span-2">
+            Detailed scope of work
+            <textarea
+              rows={10}
+              value={scope}
+              onChange={(event) => setScope(event.target.value)}
+              placeholder="Describe exactly what Ironwood will provide and perform."
+            />
+          </label>
+
+          <label className="span-2">
+            Exclusions and owner-supplied items
+            <textarea
+              rows={5}
+              value={exclusions}
+              onChange={(event) => setExclusions(event.target.value)}
+            />
+          </label>
+
+          <label className="span-2">
+            Customer-facing notes
+            <textarea
+              rows={4}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+            />
+          </label>
+
+          <label className="span-2">
+            Payment schedule
+            <textarea
+              rows={4}
+              value={schedule}
+              onChange={(event) => setSchedule(event.target.value)}
+            />
+          </label>
+
+          <label className="span-2">
+            Private Ironwood notes
+            <textarea
+              rows={4}
+              value={privateNotes}
+              onChange={(event) => setPrivateNotes(event.target.value)}
+              placeholder="Never shown on the customer proposal."
+            />
+          </label>
+        </section>
+      </div>
+
+      <aside className="builder-summary panel">
+        <h2>Estimate total</h2>
+
+        <label>
+          Default markup %
+          <input
+            type="number"
+            min="0"
+            step="0.1"
+            value={markupRate}
+            onChange={(event) => setMarkupRate(Number(event.target.value))}
+          />
+        </label>
+
+        <button
+          type="button"
+          className="button button--outline button--block"
+          onClick={applyMarkupToAll}
+        >
+          Apply markup to all lines
+        </button>
+
+        <label>
+          Sales tax %
+          <input
+            type="number"
+            min="0"
+            step="0.001"
+            value={taxRate}
+            onChange={(event) => setTaxRate(Number(event.target.value))}
+          />
+        </label>
+
+        <dl className="totals">
+          <div>
+            <dt>Base cost</dt>
+            <dd>{money(totals.subtotal)}</dd>
+          </div>
+          <div>
+            <dt>Markup</dt>
+            <dd>{money(totals.markupTotal)}</dd>
+          </div>
+          <div>
+            <dt>Tax</dt>
+            <dd>{money(totals.taxTotal)}</dd>
+          </div>
+          <div className="grand">
+            <dt>Total</dt>
+            <dd>{money(totals.total)}</dd>
+          </div>
+        </dl>
+
+        {error && <p className="error-box">{error}</p>}
+
+        <button
+          onClick={save}
+          disabled={busy}
+          className="button button--gold button--block"
+        >
+          <Save size={17} />
+          {busy ? "Saving…" : "Save estimate"}
+        </button>
+
+        <p className="fine-print">
+          Private notes and raw cost details stay inside Ironwood.
+        </p>
+      </aside>
+    </div>
+  );
 }
