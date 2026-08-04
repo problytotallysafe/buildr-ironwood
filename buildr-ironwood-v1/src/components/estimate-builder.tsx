@@ -22,6 +22,48 @@ type CustomerOption = {
   company_name: string | null;
 };
 
+type EstimateSectionDraft = {
+  clientId: string;
+  title: string;
+  description: string;
+  items: EstimateItemDraft[];
+};
+
+type InitialEstimate = {
+  id: string;
+  customer_id: string;
+  title: string;
+  project_address: string | null;
+  scope: string | null;
+  exclusions: string | null;
+  customer_notes: string | null;
+  private_notes: string | null;
+  payment_schedule: string | null;
+  tax_rate: number | string | null;
+  default_markup_rate: number | string | null;
+  sections: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    sort_order: number;
+    items: Array<{
+      item_type: EstimateItemDraft["item_type"];
+      category: string | null;
+      description: string;
+      quantity: number | string;
+      unit: string | null;
+      unit_cost: number | string;
+      markup_rate: number | string;
+      taxable: boolean | null;
+      vendor: string | null;
+      vendor_sku: string | null;
+      vendor_url: string | null;
+      private_notes: string | null;
+      sort_order: number;
+    }>;
+  }>;
+};
+
 type EstimateBuilderProps = {
   customers: CustomerOption[];
   defaults: {
@@ -29,13 +71,7 @@ type EstimateBuilderProps = {
     markup_rate: number;
   };
   selectedCustomer?: string;
-};
-
-type EstimateSectionDraft = {
-  clientId: string;
-  title: string;
-  description: string;
-  items: EstimateItemDraft[];
+  initialEstimate?: InitialEstimate;
 };
 
 function makeId() {
@@ -68,33 +104,78 @@ function blankSection(title = "General", markup = 20): EstimateSectionDraft {
   };
 }
 
+function loadSections(
+  initialEstimate: InitialEstimate | undefined,
+  markup: number,
+): EstimateSectionDraft[] {
+  if (!initialEstimate?.sections?.length) {
+    return [blankSection("General", markup)];
+  }
+
+  return [...initialEstimate.sections]
+    .sort((a, b) => Number(a.sort_order) - Number(b.sort_order))
+    .map((section) => ({
+      clientId: section.id || makeId(),
+      title: section.title || "General",
+      description: section.description || "",
+      items:
+        [...(section.items ?? [])]
+          .sort((a, b) => Number(a.sort_order) - Number(b.sort_order))
+          .map((item) => ({
+            item_type: item.item_type || "material",
+            category: item.category || "",
+            description: item.description || "",
+            quantity: Number(item.quantity ?? 1),
+            unit: item.unit || "each",
+            unit_cost: Number(item.unit_cost ?? 0),
+            markup_rate: Number(item.markup_rate ?? markup),
+            taxable: Boolean(item.taxable),
+            vendor: item.vendor || "",
+            vendor_sku: item.vendor_sku || "",
+            vendor_url: item.vendor_url || "",
+            private_notes: item.private_notes || "",
+          })) || [blankItem(markup)],
+    }));
+}
+
 export function EstimateBuilder({
   customers,
   defaults,
   selectedCustomer,
+  initialEstimate,
 }: EstimateBuilderProps) {
   const router = useRouter();
   const supabase = createClient();
+  const isEditing = Boolean(initialEstimate?.id);
 
-  const startingMarkup = Number(defaults.markup_rate || 20);
+  const startingMarkup = Number(
+    initialEstimate?.default_markup_rate ?? defaults.markup_rate ?? 20,
+  );
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [customerId, setCustomerId] = useState(selectedCustomer ?? "");
-  const [title, setTitle] = useState("");
-  const [address, setAddress] = useState("");
-  const [scope, setScope] = useState("");
-  const [exclusions, setExclusions] = useState("");
-  const [notes, setNotes] = useState("");
-  const [privateNotes, setPrivateNotes] = useState("");
-  const [schedule, setSchedule] = useState(
-    "30% deposit to reserve scheduling; progress payments tied to completed phases; final balance due at final walkthrough.",
+  const [customerId, setCustomerId] = useState(
+    initialEstimate?.customer_id ?? selectedCustomer ?? "",
   );
-  const [taxRate, setTaxRate] = useState(Number(defaults.tax_rate || 0));
+  const [title, setTitle] = useState(initialEstimate?.title ?? "");
+  const [address, setAddress] = useState(initialEstimate?.project_address ?? "");
+  const [scope, setScope] = useState(initialEstimate?.scope ?? "");
+  const [exclusions, setExclusions] = useState(initialEstimate?.exclusions ?? "");
+  const [notes, setNotes] = useState(initialEstimate?.customer_notes ?? "");
+  const [privateNotes, setPrivateNotes] = useState(
+    initialEstimate?.private_notes ?? "",
+  );
+  const [schedule, setSchedule] = useState(
+    initialEstimate?.payment_schedule ??
+      "30% deposit to reserve scheduling; progress payments tied to completed phases; final balance due at final walkthrough.",
+  );
+  const [taxRate, setTaxRate] = useState(
+    Number(initialEstimate?.tax_rate ?? defaults.tax_rate ?? 0),
+  );
   const [markupRate, setMarkupRate] = useState(startingMarkup);
-  const [sections, setSections] = useState<EstimateSectionDraft[]>([
-    blankSection("General", startingMarkup),
-  ]);
+  const [sections, setSections] = useState<EstimateSectionDraft[]>(
+    loadSections(initialEstimate, startingMarkup),
+  );
 
   const allItems = useMemo(
     () => sections.flatMap((section) => section.items),
@@ -234,36 +315,81 @@ export function EstimateBuilder({
         return;
       }
 
-      const { data: estimate, error: estimateError } = await supabase
-        .from("estimates")
-        .insert({
-          owner_id: user.id,
-          customer_id: customerId,
-          title: title.trim(),
-          project_address: address.trim() || null,
-          scope: scope.trim() || null,
-          exclusions: exclusions.trim() || null,
-          customer_notes: notes.trim() || null,
-          private_notes: privateNotes.trim() || null,
-          payment_schedule: schedule.trim() || null,
-          tax_rate: taxRate,
-          default_markup_rate: markupRate,
-          subtotal: totals.subtotal,
-          markup_total: totals.markupTotal,
-          tax_total: totals.taxTotal,
-          total: totals.total,
-        })
-        .select("id")
-        .single();
+      const estimateValues = {
+        customer_id: customerId,
+        title: title.trim(),
+        project_address: address.trim() || null,
+        scope: scope.trim() || null,
+        exclusions: exclusions.trim() || null,
+        customer_notes: notes.trim() || null,
+        private_notes: privateNotes.trim() || null,
+        payment_schedule: schedule.trim() || null,
+        tax_rate: taxRate,
+        default_markup_rate: markupRate,
+        subtotal: totals.subtotal,
+        markup_total: totals.markupTotal,
+        tax_total: totals.taxTotal,
+        total: totals.total,
+      };
 
-      if (estimateError || !estimate) {
-        setError(estimateError?.message || "Could not save the estimate.");
+      let estimateId = initialEstimate?.id;
+
+      if (isEditing && estimateId) {
+        const { error: updateError } = await supabase
+          .from("estimates")
+          .update(estimateValues)
+          .eq("id", estimateId);
+
+        if (updateError) {
+          setError(updateError.message);
+          return;
+        }
+
+        const { error: deleteItemsError } = await supabase
+          .from("estimate_items")
+          .delete()
+          .eq("estimate_id", estimateId);
+
+        if (deleteItemsError) {
+          setError(deleteItemsError.message);
+          return;
+        }
+
+        const { error: deleteSectionsError } = await supabase
+          .from("estimate_sections")
+          .delete()
+          .eq("estimate_id", estimateId);
+
+        if (deleteSectionsError) {
+          setError(deleteSectionsError.message);
+          return;
+        }
+      } else {
+        const { data: estimate, error: estimateError } = await supabase
+          .from("estimates")
+          .insert({
+            owner_id: user.id,
+            ...estimateValues,
+          })
+          .select("id")
+          .single();
+
+        if (estimateError || !estimate) {
+          setError(estimateError?.message || "Could not save the estimate.");
+          return;
+        }
+
+        estimateId = String(estimate.id);
+      }
+
+      if (!estimateId) {
+        setError("Could not determine the estimate ID.");
         return;
       }
 
       const sectionRows = sectionsWithItems.map((section, index) => ({
         owner_id: user.id,
-        estimate_id: estimate.id,
+        estimate_id: estimateId,
         title: section.title.trim(),
         description: section.description.trim() || null,
         sort_order: index,
@@ -275,7 +401,6 @@ export function EstimateBuilder({
         .select("id, sort_order");
 
       if (sectionError || !savedSections) {
-        await supabase.from("estimates").delete().eq("id", estimate.id);
         setError(sectionError?.message || "Could not save estimate sections.");
         return;
       }
@@ -296,7 +421,7 @@ export function EstimateBuilder({
 
             return {
               owner_id: user.id,
-              estimate_id: estimate.id,
+              estimate_id: estimateId,
               section_id: sectionIdByOrder.get(sectionIndex),
               sort_order: itemIndex,
               item_type: item.item_type,
@@ -323,12 +448,11 @@ export function EstimateBuilder({
         .insert(itemRows);
 
       if (itemError) {
-        await supabase.from("estimates").delete().eq("id", estimate.id);
         setError(itemError.message);
         return;
       }
 
-      router.push(`/estimates/${estimate.id}`);
+      router.push(`/estimates/${estimateId}`);
       router.refresh();
     } finally {
       setBusy(false);
@@ -713,7 +837,7 @@ export function EstimateBuilder({
       </div>
 
       <aside className="builder-summary panel">
-        <h2>Estimate total</h2>
+        <h2>{isEditing ? "Updated total" : "Estimate total"}</h2>
 
         <label>
           Default markup %
@@ -772,7 +896,11 @@ export function EstimateBuilder({
           className="button button--gold button--block"
         >
           <Save size={17} />
-          {busy ? "Saving…" : "Save estimate"}
+          {busy
+            ? "Saving…"
+            : isEditing
+              ? "Save changes"
+              : "Save estimate"}
         </button>
 
         <p className="fine-print">
