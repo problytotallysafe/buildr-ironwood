@@ -1,5 +1,77 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/money";
 import { StatusPill } from "@/components/status-pill";
-export default async function ProjectsPage(){const supabase=await createClient();const {data}=await supabase.from("projects").select("*,customers(first_name,last_name),estimates(estimate_number,title,total)").order("created_at",{ascending:false});return <div className="page-wrap"><PageHeader eyebrow="Job tracking" title="Projects" description="Accepted work, current stage, schedule notes, contract value, and payment progress."/><section className="panel"><div className="table-wrap"><table><thead><tr><th>Project</th><th>Customer</th><th>Status</th><th>Contract</th><th>Paid</th></tr></thead><tbody>{(data??[]).map((p:any)=><tr key={p.id}><td>{p.estimates?.title||p.name}<small>{p.estimates?.estimate_number}</small></td><td>{p.customers?`${p.customers.first_name} ${p.customers.last_name}`:"—"}</td><td><StatusPill value={p.status}/></td><td>{money(p.contract_total)}</td><td>{money(p.amount_paid)}</td></tr>)}{!data?.length&&<tr><td colSpan={5} className="empty-cell">Accepted proposals automatically become projects.</td></tr>}</tbody></table></div></section></div>}
+
+export default async function ProjectsPage() {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("projects")
+    .select(
+      "*,customers(first_name,last_name),estimates(estimate_number,title,total)",
+    )
+    .order("created_at", { ascending: false });
+
+  return (
+    <div className="page-wrap">
+      <PageHeader
+        eyebrow="Job tracking"
+        title="Projects"
+        description="Accepted work, current stage, schedule notes, contract value, and payment progress."
+      />
+
+      <section className="panel">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Customer</th>
+                <th>Status</th>
+                <th>Contract</th>
+                <th>Paid</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {(data ?? []).map((p: any) => (
+                <tr key={p.id}>
+                  <td>
+                    <Link className="project-table-link" href={`/projects/${p.id}`}>
+                      {p.estimates?.title || p.name || "Project"}
+                    </Link>
+
+                    <small>{p.estimates?.estimate_number}</small>
+                  </td>
+
+                  <td>
+                    {p.customers
+                      ? `${p.customers.first_name} ${p.customers.last_name}`
+                      : "—"}
+                  </td>
+
+                  <td>
+                    <StatusPill value={p.status} />
+                  </td>
+
+                  <td>{money(p.contract_total)}</td>
+                  <td>{money(p.amount_paid)}</td>
+                </tr>
+              ))}
+
+              {!data?.length && (
+                <tr>
+                  <td colSpan={5} className="empty-cell">
+                    Accepted proposals automatically become projects.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
