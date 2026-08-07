@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Clock3 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { ProjectMedia } from "@/components/project-media";
@@ -124,6 +124,22 @@ export default async function ProjectDetailPage({
         }
       />
 
+      <div
+        style={{
+          display: "flex",
+          gap: "12px",
+          marginBottom: "18px",
+        }}
+      >
+        <Link
+          href={`/time?project=${project.id}`}
+          className="button button--gold"
+        >
+          <Clock3 size={17} />
+          Track Time
+        </Link>
+      </div>
+
       <section className="project-overview-grid">
         <article className="panel">
           <span className="project-overview-label">
@@ -183,14 +199,10 @@ export default async function ProjectDetailPage({
 
           {estimate?.payment_schedule && (
             <div>
-              <h2>
-                Payment schedule
-              </h2>
+              <h2>Payment schedule</h2>
 
               <p className="pre-line">
-                {
-                  estimate.payment_schedule
-                }
+                {estimate.payment_schedule}
               </p>
             </div>
           )}
