@@ -1,0 +1,15 @@
+
+.labor-analytics { margin-bottom: 18px; }
+.labor-summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.labor-stat { border:1px solid var(--line); border-radius:12px; padding:14px; background:#fff; }
+.labor-stat span { display:block; margin-bottom:7px; font-size:.78rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; opacity:.65; }
+.labor-stat strong { display:block; font-size:1.25rem; }
+.labor-stat small { display:block; margin-top:6px; line-height:1.35; opacity:.65; }
+.labor-good { color:#226b3a; }
+.labor-bad { color:#a43a34; }
+.labor-section { margin-top:24px; }
+.labor-category-list { display:grid; gap:8px; }
+.labor-category-row { display:flex; align-items:center; justify-content:space-between; gap:14px; border-top:1px solid var(--line); padding:11px 0; }
+.labor-category-row small { display:block; margin-top:3px; opacity:.65; }
+@media (max-width:1000px){.labor-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media (max-width:620px){.labor-summary-grid{grid-template-columns:1fr;}}
