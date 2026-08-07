@@ -1,0 +1,65 @@
+
+.time-tracker-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.time-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.time-summary-grid .panel {
+  margin: 0;
+}
+
+.time-summary-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.65;
+}
+
+.time-summary-number {
+  font-size: 1.55rem;
+}
+
+.active-timer-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid var(--gold);
+  border-radius: 14px;
+  padding: 18px;
+  background: var(--cream);
+}
+
+.active-timer-card strong {
+  display: block;
+  font-size: 1.25rem;
+}
+
+.active-timer-card p {
+  margin: 5px 0 0;
+}
+
+.time-worker-add {
+  display: flex;
+  align-items: end;
+}
+
+@media (max-width: 760px) {
+  .time-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .active-timer-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
