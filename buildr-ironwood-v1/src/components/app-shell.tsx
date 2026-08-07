@@ -9,6 +9,7 @@ import {
   Clock3,
   CreditCard,
   FileText,
+  LineChart,
   LogOut,
   Menu,
   Settings,
@@ -52,6 +53,11 @@ const nav = [
     icon: CreditCard,
   },
   {
+    href: "/analytics",
+    label: "Analytics",
+    icon: LineChart,
+  },
+  {
     href: "/catalog",
     label: "Price Book",
     icon: BookOpen,
@@ -72,12 +78,11 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] =
+    useState(false);
 
   async function signOut() {
     await createClient().auth.signOut();
-
     router.replace("/login");
     router.refresh();
   }
@@ -86,7 +91,9 @@ export function AppShell({
     <div className="app-frame">
       <button
         className="mobile-menu"
-        onClick={() => setOpen(true)}
+        onClick={() =>
+          setOpen(true)
+        }
         aria-label="Open navigation"
       >
         <Menu size={22} />
@@ -95,14 +102,18 @@ export function AppShell({
       {open && (
         <button
           className="nav-scrim"
-          onClick={() => setOpen(false)}
+          onClick={() =>
+            setOpen(false)
+          }
           aria-label="Close navigation"
         />
       )}
 
       <aside
         className={`sidebar ${
-          open ? "sidebar--open" : ""
+          open
+            ? "sidebar--open"
+            : ""
         }`}
       >
         <div className="sidebar-brand">
@@ -110,7 +121,9 @@ export function AppShell({
 
           <button
             className="sidebar-close"
-            onClick={() => setOpen(false)}
+            onClick={() =>
+              setOpen(false)
+            }
             aria-label="Close navigation"
           >
             <X />
@@ -128,12 +141,14 @@ export function AppShell({
         <nav className="side-nav">
           {nav.map((item) => {
             const active =
-              pathname === item.href ||
+              pathname ===
+                item.href ||
               pathname.startsWith(
                 `${item.href}/`,
               );
 
-            const Icon = item.icon;
+            const Icon =
+              item.icon;
 
             return (
               <Link
@@ -143,10 +158,14 @@ export function AppShell({
                   setOpen(false)
                 }
                 className={
-                  active ? "active" : ""
+                  active
+                    ? "active"
+                    : ""
                 }
               >
-                <Icon size={19} />
+                <Icon
+                  size={19}
+                />
 
                 {item.label}
               </Link>
@@ -159,8 +178,12 @@ export function AppShell({
             {email}
           </small>
 
-          <button onClick={signOut}>
-            <LogOut size={17} />
+          <button
+            onClick={signOut}
+          >
+            <LogOut
+              size={17}
+            />
 
             Sign out
           </button>
