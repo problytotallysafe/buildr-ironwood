@@ -1,0 +1,711 @@
+import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
+import { createClient } from "@/lib/supabase/server";
+import { money } from "@/lib/money";
+
+function pct(value: number) {
+  if (!Number.isFinite(value)) return "0.0%";
+  return `${value.toFixed(1)}%`;
+}
+
+export default async function AnalyticsPage() {
+  const supabase = await createClient();
+
+  const { data: projects } = await supabase
+    .from("projects")
+    .select(`
+      id,
+      name,
+      status,
+      contract_total,
+      amount_paid,
+      created_at,
+      customers(
+        first_name,
+        last_name
+      ),
+      estimates(
+        id,
+        estimate_number,
+        title,
+        subtotal,
+        markup_total,
+        tax_total,
+        total
+      )
+    `)
+    .order("created_at", { ascending: false });
+
+  const projectRows = projects ?? [];
+
+  const estimateIds = projectRows
+    .map((project: any) => project.estimates?.id)
+    .filter(Boolean);
+
+  const projectIds = projectRows
+    .map((project: any) => project.id)
+    .filter(Boolean);
+
+  const [{ data: estimateItems }, { data: timeEntries }] = await Promise.all([
+    estimateIds.length
+      ? supabase
+          .from("estimate_items")
+          .select(
+            "estimate_id,item_type,quantity,unit_cost,line_subtotal",
+          )
+          .in("estimate_id", estimateIds)
+      : Promise.resolve({ data: [] } as any),
+
+    projectIds.length
+      ? supabase
+          .from("time_entries")
+          .select(
+            "project_id,duration_minutes,ended_at,hourly_cost",
+          )
+          .in("project_id", projectIds)
+      : Promise.resolve({ data: [] } as any),
+  ]);
+
+  const laborEstimatedByEstimate = new Map<string, number>();
+
+  for (const item of estimateItems ?? []) {
+    if (item.item_type !== "labor") continue;
+
+    const current =
+      laborEstimatedByEstimate.get(item.estimate_id) ?? 0;
+
+    const base =
+      item.line_subtotal != null
+        ? Number(item.line_subtotal)
+        : Number(item.quantity ?? 0) *
+          Number(item.unit_cost ?? 0);
+
+    laborEstimatedByEstimate.set(
+      item.estimate_id,
+      current + base,
+    );
+  }
+
+  const actualLaborByProject = new Map<
+    string,
+    { hours: number; cost: number }
+  >();
+
+  for (const entry of timeEntries ?? []) {
+    if (!entry.ended_at) continue;
+
+    const minutes = Number(
+      entry.duration_minutes ?? 0,
+    );
+
+    const hours = minutes / 60;
+
+    const current =
+      actualLaborByProject.get(
+        entry.project_id,
+      ) ?? {
+        hours: 0,
+        cost: 0,
+      };
+
+    current.hours += hours;
+
+    current.cost +=
+      hours *
+      Number(entry.hourly_cost ?? 0);
+
+    actualLaborByProject.set(
+      entry.project_id,
+      current,
+    );
+  }
+
+  const analytics = projectRows.map(
+    (project: any) => {
+      const estimate =
+        project.estimates;
+
+      const estimateId =
+        estimate?.id ?? "";
+
+      const estimatedBaseCost =
+        Number(
+          estimate?.subtotal ?? 0,
+        );
+
+      const estimatedMarkup =
+        Number(
+          estimate?.markup_total ?? 0,
+        );
+
+      const tax =
+        Number(
+          estimate?.tax_total ?? 0,
+        );
+
+      const preTaxRevenue =
+        estimatedBaseCost +
+        estimatedMarkup;
+
+      const contractTotal =
+        Number(
+          project.contract_total ??
+            estimate?.total ??
+            preTaxRevenue +
+              tax,
+        );
+
+      const paid =
+        Number(
+          project.amount_paid ?? 0,
+        );
+
+      const estimatedLabor =
+        laborEstimatedByEstimate.get(
+          estimateId,
+        ) ?? 0;
+
+      const actualLabor =
+        actualLaborByProject.get(
+          project.id,
+        ) ?? {
+          hours: 0,
+          cost: 0,
+        };
+
+      const projectedDirectCost =
+        Math.max(
+          0,
+          estimatedBaseCost -
+            estimatedLabor +
+            actualLabor.cost,
+        );
+
+      const estimatedGrossProfit =
+        preTaxRevenue -
+        estimatedBaseCost;
+
+      const projectedGrossProfit =
+        preTaxRevenue -
+        projectedDirectCost;
+
+      const estimatedMargin =
+        preTaxRevenue > 0
+          ? (estimatedGrossProfit /
+              preTaxRevenue) *
+            100
+          : 0;
+
+      const projectedMargin =
+        preTaxRevenue > 0
+          ? (projectedGrossProfit /
+              preTaxRevenue) *
+            100
+          : 0;
+
+      const remaining =
+        Math.max(
+          0,
+          contractTotal - paid,
+        );
+
+      return {
+        id: project.id,
+        title:
+          estimate?.title ||
+          project.name ||
+          "Project",
+        estimateNumber:
+          estimate?.estimate_number ||
+          "",
+        customer:
+          project.customers
+            ? `${project.customers.first_name} ${project.customers.last_name}`
+            : "",
+        status:
+          project.status,
+        contractTotal,
+        paid,
+        remaining,
+        preTaxRevenue,
+        estimatedBaseCost,
+        estimatedLabor,
+        actualLaborCost:
+          actualLabor.cost,
+        actualLaborHours:
+          actualLabor.hours,
+        projectedDirectCost,
+        estimatedGrossProfit,
+        projectedGrossProfit,
+        estimatedMargin,
+        projectedMargin,
+      };
+    },
+  );
+
+  const totals = analytics.reduce(
+    (sum, row) => {
+      sum.contract += row.contractTotal;
+      sum.paid += row.paid;
+      sum.remaining += row.remaining;
+      sum.preTaxRevenue +=
+        row.preTaxRevenue;
+      sum.estimatedBase +=
+        row.estimatedBaseCost;
+      sum.projectedDirect +=
+        row.projectedDirectCost;
+      sum.estimatedProfit +=
+        row.estimatedGrossProfit;
+      sum.projectedProfit +=
+        row.projectedGrossProfit;
+      sum.actualLaborCost +=
+        row.actualLaborCost;
+      sum.actualLaborHours +=
+        row.actualLaborHours;
+      return sum;
+    },
+    {
+      contract: 0,
+      paid: 0,
+      remaining: 0,
+      preTaxRevenue: 0,
+      estimatedBase: 0,
+      projectedDirect: 0,
+      estimatedProfit: 0,
+      projectedProfit: 0,
+      actualLaborCost: 0,
+      actualLaborHours: 0,
+    },
+  );
+
+  const overallEstimatedMargin =
+    totals.preTaxRevenue > 0
+      ? (totals.estimatedProfit /
+          totals.preTaxRevenue) *
+        100
+      : 0;
+
+  const overallProjectedMargin =
+    totals.preTaxRevenue > 0
+      ? (totals.projectedProfit /
+          totals.preTaxRevenue) *
+        100
+      : 0;
+
+  const sortedByProjectedProfit =
+    [...analytics].sort(
+      (a, b) =>
+        b.projectedGrossProfit -
+        a.projectedGrossProfit,
+    );
+
+  const bestProject =
+    sortedByProjectedProfit[0] ??
+    null;
+
+  const worstProject =
+    sortedByProjectedProfit[
+      sortedByProjectedProfit.length -
+        1
+    ] ?? null;
+
+  return (
+    <div className="page-wrap">
+      <PageHeader
+        eyebrow="Business intelligence"
+        title="Analytics"
+        description="Profitability, labor performance, cash collection, and project trends — separate from the estimating workflow."
+      />
+
+      <section className="analytics-summary-grid">
+        <article className="panel analytics-stat">
+          <span>
+            Contract value
+          </span>
+          <strong>
+            {money(
+              totals.contract,
+            )}
+          </strong>
+          <small>
+            Total accepted project value
+          </small>
+        </article>
+
+        <article className="panel analytics-stat">
+          <span>
+            Payments received
+          </span>
+          <strong>
+            {money(totals.paid)}
+          </strong>
+          <small>
+            Cash collected to date
+          </small>
+        </article>
+
+        <article className="panel analytics-stat">
+          <span>
+            Outstanding
+          </span>
+          <strong>
+            {money(
+              totals.remaining,
+            )}
+          </strong>
+          <small>
+            Contract balance not yet collected
+          </small>
+        </article>
+
+        <article className="panel analytics-stat">
+          <span>
+            Projected gross profit
+          </span>
+          <strong>
+            {money(
+              totals.projectedProfit,
+            )}
+          </strong>
+          <small>
+            Uses actual labor where available
+          </small>
+        </article>
+
+        <article className="panel analytics-stat">
+          <span>
+            Projected margin
+          </span>
+          <strong>
+            {pct(
+              overallProjectedMargin,
+            )}
+          </strong>
+          <small>
+            Before overhead, tax and owner compensation
+          </small>
+        </article>
+
+        <article className="panel analytics-stat">
+          <span>
+            Tracked labor
+          </span>
+          <strong>
+            {totals.actualLaborHours.toFixed(
+              1,
+            )}{" "}
+            hr
+          </strong>
+          <small>
+            {money(
+              totals.actualLaborCost,
+            )}{" "}
+            internal cost
+          </small>
+        </article>
+      </section>
+
+      <section className="analytics-insight-grid">
+        <article className="panel">
+          <h2>
+            Estimated plan
+          </h2>
+
+          <dl className="analytics-dl">
+            <div>
+              <dt>
+                Pre-tax customer revenue
+              </dt>
+              <dd>
+                {money(
+                  totals.preTaxRevenue,
+                )}
+              </dd>
+            </div>
+
+            <div>
+              <dt>
+                Estimated direct costs
+              </dt>
+              <dd>
+                {money(
+                  totals.estimatedBase,
+                )}
+              </dd>
+            </div>
+
+            <div>
+              <dt>
+                Estimated gross profit
+              </dt>
+              <dd>
+                {money(
+                  totals.estimatedProfit,
+                )}
+              </dd>
+            </div>
+
+            <div>
+              <dt>
+                Estimated margin
+              </dt>
+              <dd>
+                {pct(
+                  overallEstimatedMargin,
+                )}
+              </dd>
+            </div>
+          </dl>
+        </article>
+
+        <article className="panel">
+          <h2>
+            Current projection
+          </h2>
+
+          <dl className="analytics-dl">
+            <div>
+              <dt>
+                Projected direct costs
+              </dt>
+              <dd>
+                {money(
+                  totals.projectedDirect,
+                )}
+              </dd>
+            </div>
+
+            <div>
+              <dt>
+                Actual labor cost
+              </dt>
+              <dd>
+                {money(
+                  totals.actualLaborCost,
+                )}
+              </dd>
+            </div>
+
+            <div>
+              <dt>
+                Projected gross profit
+              </dt>
+              <dd>
+                {money(
+                  totals.projectedProfit,
+                )}
+              </dd>
+            </div>
+
+            <div>
+              <dt>
+                Projected margin
+              </dt>
+              <dd>
+                {pct(
+                  overallProjectedMargin,
+                )}
+              </dd>
+            </div>
+          </dl>
+        </article>
+
+        <article className="panel">
+          <h2>
+            Quick signals
+          </h2>
+
+          <div className="analytics-signal">
+            <span>
+              Strongest projected profit
+            </span>
+
+            <strong>
+              {bestProject
+                ? bestProject.title
+                : "—"}
+            </strong>
+
+            <small>
+              {bestProject
+                ? money(
+                    bestProject.projectedGrossProfit,
+                  )
+                : "No project data"}
+            </small>
+          </div>
+
+          <div className="analytics-signal">
+            <span>
+              Lowest projected profit
+            </span>
+
+            <strong>
+              {worstProject
+                ? worstProject.title
+                : "—"}
+            </strong>
+
+            <small>
+              {worstProject
+                ? money(
+                    worstProject.projectedGrossProfit,
+                  )
+                : "No project data"}
+            </small>
+          </div>
+        </article>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <h2>
+              Project profitability
+            </h2>
+
+            <p>
+              Estimated costs come from the accepted estimate. Projected costs replace estimated labor with actual tracked labor cost.
+            </p>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>
+                  Project
+                </th>
+                <th>
+                  Contract
+                </th>
+                <th>
+                  Paid
+                </th>
+                <th>
+                  Est. Cost
+                </th>
+                <th>
+                  Actual Labor
+                </th>
+                <th>
+                  Projected Profit
+                </th>
+                <th>
+                  Margin
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {analytics.map(
+                (row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <Link
+                        href={`/projects/${row.id}`}
+                        className="analytics-project-link"
+                      >
+                        {row.title}
+                      </Link>
+
+                      <small>
+                        {[
+                          row.estimateNumber,
+                          row.customer,
+                        ]
+                          .filter(Boolean)
+                          .join(
+                            " · ",
+                          )}
+                      </small>
+                    </td>
+
+                    <td>
+                      {money(
+                        row.contractTotal,
+                      )}
+                    </td>
+
+                    <td>
+                      {money(
+                        row.paid,
+                      )}
+                    </td>
+
+                    <td>
+                      {money(
+                        row.estimatedBaseCost,
+                      )}
+                    </td>
+
+                    <td>
+                      {money(
+                        row.actualLaborCost,
+                      )}
+
+                      <small>
+                        {row.actualLaborHours.toFixed(
+                          1,
+                        )}{" "}
+                        hr
+                      </small>
+                    </td>
+
+                    <td
+                      className={
+                        row.projectedGrossProfit <
+                        0
+                          ? "analytics-negative"
+                          : ""
+                      }
+                    >
+                      {money(
+                        row.projectedGrossProfit,
+                      )}
+                    </td>
+
+                    <td
+                      className={
+                        row.projectedMargin <
+                        0
+                          ? "analytics-negative"
+                          : ""
+                      }
+                    >
+                      {pct(
+                        row.projectedMargin,
+                      )}
+                    </td>
+                  </tr>
+                ),
+              )}
+
+              {!analytics.length && (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="empty-cell"
+                  >
+                    Accepted projects will appear here automatically.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel analytics-note">
+        <h2>
+          How to read this
+        </h2>
+
+        <p>
+          Projected profit currently uses the accepted estimate for materials, subcontractors, allowances, fees and other direct costs, while replacing estimated labor with actual tracked labor cost. Payments received are shown as cash collection only and do not increase profit. When actual expense tracking is added later, Buildr can replace the remaining estimated costs with real job expenses too.
+        </p>
+      </section>
+    </div>
+  );
+}
