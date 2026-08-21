@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Clock3 } from "lucide-react";
+import { ArrowLeft, Clock3, Pencil, Plus } from "lucide-react";
 
 import { LaborVsActual } from "@/components/labor-vs-actual";
 import { PageHeader } from "@/components/page-header";
@@ -26,7 +26,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const estimate = project.estimates as any;
   const estimateId = estimate?.id ?? null;
 
-  const [{ data: mediaRows }, { data: laborItems }, { data: timeEntries }] = await Promise.all([
+  const [{ data: mediaRows }, { data: laborItems }, { data: timeEntries }, { data: changeOrders }] = await Promise.all([
     supabase
       .from("project_media")
       .select("id,storage_path,file_name,category,room_location,caption,customer_visible,created_at")
@@ -45,6 +45,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .select("id,work_category,duration_minutes,ended_at,hourly_cost")
       .eq("project_id", id)
       .order("started_at", { ascending: true }),
+    supabase
+      .from("change_orders")
+      .select("id,change_order_number,title,status,total,created_at,accepted_at")
+      .eq("project_id", id)
+      .order("created_at", { ascending: false }),
   ]);
 
   const media = await Promise.all((mediaRows ?? []).map(async (item) => {
@@ -78,6 +83,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <Link href={`/time?project=${project.id}`} className="button button--gold">
           <Clock3 size={17}/>Track Time
         </Link>
+        <Link href={`/projects/${project.id}/edit`} className="button button--outline">
+          <Pencil size={17}/>Edit Project
+        </Link>
+        <Link href={`/projects/${project.id}/change-orders/new`} className="button button--outline">
+          <Plus size={17}/>Add Change Order
+        </Link>
       </div>
 
       <section className="project-overview-grid">
@@ -88,6 +99,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       </section>
 
       <LaborVsActual laborItems={(laborItems ?? []) as any} timeEntries={(timeEntries ?? []) as any}/>
+
+      <section className="panel project-change-orders">
+        <div className="panel-heading"><div><h2>Change orders</h2><p>Project-linked scope changes with their own customer approval trail.</p></div><Link href={`/projects/${project.id}/change-orders/new`} className="button button--gold"><Plus size={16}/>New change order</Link></div>
+        <div className="table-wrap"><table><thead><tr><th>Change order</th><th>Status</th><th>Date</th><th>Price change</th></tr></thead><tbody>{(changeOrders??[]).map((co:any)=><tr key={co.id}><td><Link className="table-link" href={`/change-orders/${co.id}`}>{co.change_order_number}<small>{co.title}</small></Link></td><td><StatusPill value={co.status}/></td><td>{new Date(co.created_at).toLocaleDateString()}</td><td>{money(co.total)}</td></tr>)}{!changeOrders?.length&&<tr><td colSpan={4} className="empty-cell">No change orders for this project.</td></tr>}</tbody></table></div>
+      </section>
 
       {(estimate?.scope || estimate?.payment_schedule) && (
         <section className="panel project-detail-info">

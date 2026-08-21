@@ -1,0 +1,5 @@
+import { notFound } from "next/navigation";
+import { ChangeOrderBuilder } from "@/components/change-order-builder";
+import { PageHeader } from "@/components/page-header";
+import { createClient } from "@/lib/supabase/server";
+export default async function NewChangeOrder({params}:{params:Promise<{id:string}>}){const {id}=await params;const supabase=await createClient();const [{data:p},{data:s}]=await Promise.all([supabase.from("projects").select("id,name,customer_id,customers(first_name,last_name),estimates(title)").eq("id",id).single(),supabase.from("business_settings").select("default_tax_rate").maybeSingle()]);if(!p)notFound();const customer=p.customers as any;const estimate=p.estimates as any;return <div className="page-wrap"><PageHeader eyebrow="Project change order" title="Document a change before work proceeds" description="Explain what changed, present the price and schedule impact, and get written customer approval."/><ChangeOrderBuilder project={{id:p.id,customer_id:p.customer_id,name:estimate?.title||p.name,customerName:`${customer?.first_name??""} ${customer?.last_name??""}`}} defaultTaxRate={Number(s?.default_tax_rate??0)}/></div>}

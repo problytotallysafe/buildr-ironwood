@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Lock, Trash2, Upload } from "lucide-react";
+import { Camera, Lock, Pencil, Trash2, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type MediaItem = {
@@ -186,6 +186,41 @@ export function ProjectMedia({
       }
 
       router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function editPhoto(item: MediaItem) {
+    const nextCaption = window.prompt("Photo caption", item.caption ?? "");
+    if (nextCaption === null) return;
+    const nextLocation = window.prompt("Room / location", item.room_location ?? "");
+    if (nextLocation === null) return;
+    const nextCategory = window.prompt(
+      "Category: before, rendering, progress, material-selection, after, or other",
+      item.category,
+    );
+    if (nextCategory === null) return;
+    const validCategory = categories.some(([key]) => key === nextCategory)
+      ? nextCategory
+      : item.category;
+    const visible = window.confirm(
+      "Should this photo be customer-visible? Choose Cancel to keep it private.",
+    );
+    setBusy(true);
+    setError("");
+    try {
+      const { error: updateError } = await supabase
+        .from("project_media")
+        .update({
+          caption: nextCaption.trim() || null,
+          room_location: nextLocation.trim() || null,
+          category: validCategory,
+          customer_visible: visible,
+        })
+        .eq("id", item.id);
+      if (updateError) setError(updateError.message);
+      else router.refresh();
     } finally {
       setBusy(false);
     }
@@ -384,7 +419,13 @@ export function ProjectMedia({
                         ).toLocaleDateString()}
                       </small>
 
-                      <button
+                      <div className="button-row"><button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Edit photo details"
+                        disabled={busy}
+                        onClick={() => editPhoto(item)}
+                      ><Pencil size={16}/></button><button
                         type="button"
                         className="icon-button danger"
                         aria-label="Delete photo"
@@ -393,6 +434,7 @@ export function ProjectMedia({
                       >
                         <Trash2 size={16} />
                       </button>
+                      </div>
                     </div>
                   </div>
                 </article>

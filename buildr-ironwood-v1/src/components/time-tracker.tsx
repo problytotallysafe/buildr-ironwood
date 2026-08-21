@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock3, Play, Plus, Square, Trash2 } from "lucide-react";
+import { Clock3, Pencil, Play, Plus, Square, Trash2, X } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -216,6 +216,9 @@ export function TimeTracker({
     manualBillable,
     setManualBillable,
   ] = useState(true);
+
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
 
   const [
     newMemberName,
@@ -519,12 +522,7 @@ export function TimeTracker({
             minutes * 60000,
         );
 
-      const {
-        error: insertError,
-      } =
-        await supabase
-          .from("time_entries")
-          .insert({
+      const entryValues = {
             owner_id:
               user.id,
 
@@ -564,7 +562,11 @@ export function TimeTracker({
 
             hourly_cost:
               worker.hourly_cost,
-          });
+          };
+
+      const { error: insertError } = editingEntryId
+        ? await supabase.from("time_entries").update(entryValues).eq("id", editingEntryId)
+        : await supabase.from("time_entries").insert(entryValues);
 
       if (insertError) {
         setError(
@@ -577,6 +579,7 @@ export function TimeTracker({
       setManualHours(1);
       setManualNotes("");
       setManualMileage(0);
+      setEditingEntryId(null);
 
       router.refresh();
     } finally {
@@ -615,12 +618,7 @@ export function TimeTracker({
         return;
       }
 
-      const {
-        error: insertError,
-      } =
-        await supabase
-          .from("team_members")
-          .insert({
+      const memberValues = {
             owner_id:
               user.id,
 
@@ -633,7 +631,11 @@ export function TimeTracker({
 
             hourly_cost:
               newMemberCost,
-          });
+          };
+
+      const { error: insertError } = editingMemberId
+        ? await supabase.from("team_members").update(memberValues).eq("id", editingMemberId)
+        : await supabase.from("team_members").insert(memberValues);
 
       if (insertError) {
         setError(
@@ -646,6 +648,7 @@ export function TimeTracker({
       setNewMemberName("");
       setNewMemberRole("");
       setNewMemberCost(0);
+      setEditingMemberId(null);
 
       router.refresh();
     } finally {
@@ -687,6 +690,29 @@ export function TimeTracker({
     } finally {
       setBusy(false);
     }
+  }
+
+  function editEntry(entry: TimeEntry) {
+    if (!entry.ended_at) return;
+    const start = new Date(entry.started_at);
+    setEditingEntryId(entry.id);
+    setManualProjectId(entry.project_id);
+    setManualWorkerType(entry.team_member_id ?? "owner");
+    setManualCategory(entry.work_category);
+    setManualDate(start.toISOString().slice(0, 10));
+    setManualStart(start.toTimeString().slice(0, 5));
+    setManualHours(durationMinutes(entry) / 60);
+    setManualNotes(entry.notes ?? "");
+    setManualMileage(Number(entry.mileage ?? 0));
+    setManualBillable(entry.billable);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function editMember(member: TeamMember) {
+    setEditingMemberId(member.id);
+    setNewMemberName(member.name);
+    setNewMemberRole(member.role ?? "");
+    setNewMemberCost(Number(member.hourly_cost ?? 0));
   }
 
   return (
@@ -967,7 +993,7 @@ export function TimeTracker({
         <div className="panel-heading">
           <div>
             <h2>
-              Manual time entry
+              {editingEntryId ? "Edit time entry" : "Manual time entry"}
             </h2>
 
             <p>
@@ -1211,8 +1237,9 @@ export function TimeTracker({
               disabled={busy}
             >
               <Plus size={17} />
-              Add time
+              {editingEntryId ? "Save time changes" : "Add time"}
             </button>
+            {editingEntryId && <button className="button button--outline" type="button" onClick={()=>setEditingEntryId(null)}><X size={16}/>Cancel</button>}
           </div>
         </form>
       </section>
@@ -1221,7 +1248,7 @@ export function TimeTracker({
         <div className="panel-heading">
           <div>
             <h2>
-              Workers / helpers
+              {editingMemberId ? "Edit worker / helper" : "Workers / helpers"}
             </h2>
 
             <p>
@@ -1304,10 +1331,12 @@ export function TimeTracker({
               disabled={busy}
             >
               <Plus size={17} />
-              Add worker
+              {editingMemberId ? "Save worker" : "Add worker"}
             </button>
+            {editingMemberId && <button className="button button--outline" type="button" onClick={()=>setEditingMemberId(null)}><X size={16}/>Cancel</button>}
           </div>
         </form>
+        {teamMembers.length>0&&<div className="record-list compact-record-list">{teamMembers.map(member=><button type="button" key={member.id} onClick={()=>editMember(member)}><span><strong>{member.name}</strong><small>{member.role||"Helper"} • {formatMoney(Number(member.hourly_cost))}/hr</small></span><Pencil size={15}/></button>)}</div>}
       </section>
 
       <section className="panel">
@@ -1417,7 +1446,13 @@ export function TimeTracker({
                       </td>
 
                       <td>
-                        <button
+                        <div className="button-row"><button
+                          type="button"
+                          className="icon-button"
+                          disabled={busy || !entry.ended_at}
+                          onClick={() => editEntry(entry)}
+                          aria-label="Edit time entry"
+                        ><Pencil size={16}/></button><button
                           type="button"
                           className="icon-button danger"
                           disabled={
@@ -1436,6 +1471,7 @@ export function TimeTracker({
                             }
                           />
                         </button>
+                        </div>
                       </td>
                     </tr>
                   );

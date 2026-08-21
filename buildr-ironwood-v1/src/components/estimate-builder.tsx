@@ -31,6 +31,8 @@ type EstimateSectionDraft = {
 
 type InitialEstimate = {
   id: string;
+  status: string;
+  revision_number: number | null;
   customer_id: string;
   title: string;
   project_address: string | null;
@@ -39,6 +41,7 @@ type InitialEstimate = {
   customer_notes: string | null;
   private_notes: string | null;
   payment_schedule: string | null;
+  independence_assessment_id?: string | null;
   tax_rate: number | string | null;
   default_markup_rate: number | string | null;
   sections: Array<{
@@ -68,6 +71,7 @@ type EstimatePreset = {
   title?: string;
   paymentSchedule?: string;
   scopeStarter?: string;
+  independenceAssessmentId?: string;
   sections?: Array<{
     title: string;
     description?: string;
@@ -186,6 +190,7 @@ export function EstimateBuilder({
   const [privateNotes, setPrivateNotes] = useState(
     initialEstimate?.private_notes ?? "",
   );
+  const [revisionReason, setRevisionReason] = useState("");
   const [schedule, setSchedule] = useState(
     initialEstimate?.payment_schedule ??
       preset?.paymentSchedule ??
@@ -317,6 +322,11 @@ export function EstimateBuilder({
       return;
     }
 
+    if (isEditing && initialEstimate?.status !== "draft" && !revisionReason.trim()) {
+      setError("Enter a reason for the revision so the approval log explains what changed.");
+      return;
+    }
+
     const sectionsWithItems = sections.filter((section) =>
       section.items.some((item) => item.description.trim()),
     );
@@ -358,11 +368,30 @@ export function EstimateBuilder({
         markup_total: totals.markupTotal,
         tax_total: totals.taxTotal,
         total: totals.total,
+        independence_assessment_id:
+          initialEstimate?.independence_assessment_id ??
+          preset?.independenceAssessmentId ??
+          null,
       };
 
       let estimateId = initialEstimate?.id;
 
       if (isEditing && estimateId) {
+        if (initialEstimate?.status !== "draft") {
+          const { error: revisionError } = await supabase.rpc(
+            "begin_estimate_revision",
+            {
+              p_estimate_id: estimateId,
+              p_reason: revisionReason.trim() || null,
+            },
+          );
+
+          if (revisionError) {
+            setError(revisionError.message);
+            return;
+          }
+        }
+
         const { error: updateError } = await supabase
           .from("estimates")
           .update(estimateValues)
@@ -491,6 +520,25 @@ export function EstimateBuilder({
     <div className="builder-layout">
       <div className="builder-main">
         <section className="panel form-grid">
+          {isEditing && initialEstimate?.status !== "draft" && (
+            <div className="span-2 revision-warning">
+              <strong>
+                This {initialEstimate?.status} estimate will become a new draft revision.
+              </strong>
+              <p>
+                The existing version and customer acceptance will be preserved in the revision log. The revised estimate must be sent and accepted again.
+              </p>
+              <label>
+                Reason for revision
+                <input
+                  value={revisionReason}
+                  onChange={(event) => setRevisionReason(event.target.value)}
+                  placeholder="Customer requested changes, corrected scope, selection change…"
+                  required
+                />
+              </label>
+            </div>
+          )}
           <label className="span-2">
             Customer
             <select

@@ -10,6 +10,7 @@ import {
   CreditCard,
   FileText,
   LineChart,
+  ShieldCheck,
   LogOut,
   Menu,
   Settings,
@@ -36,6 +37,11 @@ const nav = [
     href: "/estimates",
     label: "Estimates",
     icon: FileText,
+  },
+  {
+    href: "/independence",
+    label: "Independence",
+    icon: ShieldCheck,
   },
   {
     href: "/projects",
