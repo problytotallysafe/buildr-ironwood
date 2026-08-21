@@ -16,6 +16,7 @@ type ProjectType =
   | "flooring"
   | "small-job"
   | "large-remodel"
+  | "independence"
   | "other";
 
 export function SmartEstimateSetup({
@@ -48,6 +49,8 @@ export function SmartEstimateSetup({
         return "Buildr will keep the estimate lean and use a simple deposit/materials/final payment structure.";
       case "large-remodel":
         return "Buildr will create a multi-phase proposal and a progress-payment schedule suitable for a larger project.";
+      case "independence":
+        return "Start with a saved Independence In-Home Evaluation so the base package and selected Independence options carry into the proposal.";
       default:
         return "Buildr will start with a flexible general structure that you can customize.";
     }
@@ -55,6 +58,11 @@ export function SmartEstimateSetup({
 
   function continueToEstimate() {
     if (!customerId) return;
+
+    if (projectType === "independence") {
+      router.push(`/independence/new?customer=${customerId}`);
+      return;
+    }
 
     const params = new URLSearchParams({
       setup: "1",
@@ -109,6 +117,7 @@ export function SmartEstimateSetup({
               ["flooring", "Flooring"],
               ["small-job", "Small job / repair"],
               ["large-remodel", "Whole-home / large remodel"],
+              ["independence", "Independence Collection"],
               ["other", "Other / custom"],
             ].map(([value, label]) => (
               <button

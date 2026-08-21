@@ -7,7 +7,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   try {
     const { id } = await params; const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser(); if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { data: estimate, error } = await supabase.from("estimates").select("id,estimate_number,title,total,public_token,customers(first_name,last_name,email)").eq("id",id).single();
+    const { data: estimate, error } = await supabase.from("estimates").select("id,estimate_number,revision_number,title,total,public_token,customers(first_name,last_name,email)").eq("id",id).single();
     if(error||!estimate) return NextResponse.json({error:"Estimate not found."},{status:404});
     const customer = Array.isArray(estimate.customers) ? estimate.customers[0] : estimate.customers;
     if(!customer?.email) return NextResponse.json({error:"Add a customer email before sending."},{status:400});

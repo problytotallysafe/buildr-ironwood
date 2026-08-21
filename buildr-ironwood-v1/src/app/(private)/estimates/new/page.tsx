@@ -13,9 +13,10 @@ type SearchParams = {
   floorType?: string;
   materialSelected?: string;
   largeScope?: string;
+  assessment?: string;
 };
 
-function buildPreset(query: SearchParams) {
+function buildPreset(query: SearchParams, assessment?: any) {
   const projectType = query.projectType ?? "other";
   const size = query.projectSize ?? "standard";
 
@@ -27,6 +28,43 @@ function buildPreset(query: SearchParams) {
 
   const largePayment =
     "30% deposit at contract signing. Progress draws are due at agreed project milestones, with the final balance due after substantial completion and final walkthrough.";
+
+  if (projectType === "independence" && assessment) {
+    const baseItems = (assessment.base_package_items ?? []) as string[];
+    const selectedOptions = (assessment.independence_options ?? []) as string[];
+
+    return {
+      title: "Ironwood Independence Collection",
+      independenceAssessmentId: assessment.id,
+      paymentSchedule: standardPayment,
+      scopeStarter: [
+        "Ironwood Independence Collection",
+        "This plan is designed to improve everyday comfort, safety, and long-term independence.",
+        assessment.customer_goals
+          ? `Customer goals:\n${assessment.customer_goals}`
+          : "",
+        baseItems.length
+          ? `Base package:\n${baseItems.map((item) => `• ${item}`).join("\n")}`
+          : "",
+        selectedOptions.length
+          ? `Selected Independence options (priced separately):\n${selectedOptions.map((item) => `• ${item}`).join("\n")}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      sections: [
+        {
+          title: "Independence Collection base package",
+          description:
+            "Standardized installation focused on comfort, safety, and daily independence.",
+        },
+        ...selectedOptions.map((title) => ({
+          title,
+          description: "Separately priced Independence option.",
+        })),
+      ],
+    };
+  }
 
   if (projectType === "bathroom") {
     const bathType = query.bathType ?? "full-remodel";
@@ -201,6 +239,14 @@ export default async function NewEstimatePage({
       .maybeSingle(),
   ]);
 
+  const { data: assessment } = query.assessment
+    ? await supabase
+        .from("independence_assessments")
+        .select("*")
+        .eq("id", query.assessment)
+        .maybeSingle()
+    : { data: null };
+
   if (query.setup !== "1") {
     return (
       <div className="page-wrap page-wrap--narrow">
@@ -233,7 +279,7 @@ export default async function NewEstimatePage({
           tax_rate: Number(settings?.default_tax_rate ?? 0),
           markup_rate: Number(settings?.default_markup_rate ?? 20),
         }}
-        preset={buildPreset(query)}
+        preset={buildPreset(query, assessment)}
       />
     </div>
   );
