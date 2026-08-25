@@ -13,6 +13,7 @@ export default async function PrivateLayout({ children }: { children: React.Reac
     .from("time_entries")
     .select("id,project_id,started_at,projects(name,estimates(title))")
     .eq("owner_id", user.id)
+    .is("team_member_id", null)
     .is("ended_at", null)
     .order("started_at", { ascending: false })
     .limit(1)
