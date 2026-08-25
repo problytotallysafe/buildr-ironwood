@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Clock3, Pencil, Plus } from "lucide-react";
+import { revalidatePath } from "next/cache";
+import { ArrowLeft, ChevronRight, Clock3, CreditCard, FileText, Pencil, Plus } from "lucide-react";
 
 import { LaborVsActual } from "@/components/labor-vs-actual";
 import { PageHeader } from "@/components/page-header";
@@ -8,6 +9,20 @@ import { ProjectMedia } from "@/components/project-media";
 import { StatusPill } from "@/components/status-pill";
 import { money } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
+
+async function updateProjectStatus(formData: FormData) {
+  "use server";
+  const projectId = String(formData.get("project_id") || "");
+  const status = String(formData.get("status") || "");
+  const allowedStatuses = ["scheduled", "in_progress", "waiting", "substantially_complete", "complete", "on_hold"];
+  if (!projectId || !allowedStatuses.includes(status)) return;
+  const supabase = await createClient();
+  const { error } = await supabase.from("projects").update({ status }).eq("id", projectId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  revalidatePath("/dashboard");
+}
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -26,7 +41,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const estimate = project.estimates as any;
   const estimateId = estimate?.id ?? null;
 
-  const [{ data: mediaRows }, { data: laborItems }, { data: timeEntries }, { data: changeOrders }] = await Promise.all([
+  const [{ data: mediaRows }, { data: laborItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }] = await Promise.all([
     supabase
       .from("project_media")
       .select("id,storage_path,file_name,category,room_location,caption,customer_visible,created_at")
@@ -50,6 +65,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .select("id,change_order_number,title,status,total,created_at,accepted_at")
       .eq("project_id", id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("payments")
+      .select("id,amount,payment_method,reference_number,notes,received_at")
+      .eq("project_id", id)
+      .order("received_at", { ascending: false }),
   ]);
 
   const media = await Promise.all((mediaRows ?? []).map(async (item) => {
@@ -92,10 +112,27 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <section className="project-overview-grid">
-        <article className="panel"><span className="project-overview-label">Status</span><div className="project-overview-value"><StatusPill value={project.status}/></div></article>
-        <article className="panel"><span className="project-overview-label">Contract</span><strong className="project-overview-number">{money(contractTotal)}</strong></article>
-        <article className="panel"><span className="project-overview-label">Paid</span><strong className="project-overview-number">{money(amountPaid)}</strong></article>
-        <article className="panel"><span className="project-overview-label">Remaining</span><strong className="project-overview-number">{money(remaining)}</strong></article>
+        <Link className="panel project-overview-link" href="#status"><span className="project-overview-label">Status</span><div className="project-overview-value"><StatusPill value={project.status}/><ChevronRight size={18}/></div></Link>
+        <Link className="panel project-overview-link" href="#contract"><span className="project-overview-label">Contract</span><div className="project-overview-value"><strong className="project-overview-number">{money(contractTotal)}</strong><ChevronRight size={18}/></div></Link>
+        <Link className="panel project-overview-link" href="#payments"><span className="project-overview-label">Paid</span><div className="project-overview-value"><strong className="project-overview-number">{money(amountPaid)}</strong><ChevronRight size={18}/></div></Link>
+        <Link className="panel project-overview-link" href="#payments"><span className="project-overview-label">Remaining</span><div className="project-overview-value"><strong className="project-overview-number">{money(remaining)}</strong><ChevronRight size={18}/></div></Link>
+      </section>
+
+      <section id="status" className="panel project-status-panel project-section-anchor">
+        <div><span className="project-overview-label">Project status</span><h2>Keep the job’s current stage clear</h2><p>Change the status here as the project moves forward. The projects list and dashboard update with it.</p></div>
+        <form action={updateProjectStatus} className="project-status-form"><input type="hidden" name="project_id" value={project.id}/><label>Status<select name="status" defaultValue={project.status}><option value="scheduled">Scheduled</option><option value="in_progress">In progress</option><option value="waiting">Waiting</option><option value="on_hold">On hold</option><option value="substantially_complete">Substantially complete</option><option value="complete">Complete</option></select></label><button className="button button--gold">Update status</button></form>
+      </section>
+
+      <section id="contract" className="panel project-contract-panel project-section-anchor">
+        <div className="panel-heading"><div><span className="project-overview-label">Contract details</span><h2>{money(contractTotal)} contract total</h2><p>Review the accepted estimate, scope, and agreed payment schedule.</p></div>{estimateId && <Link href={`/estimates/${estimateId}`} className="button button--outline"><FileText size={16}/>View accepted estimate</Link>}</div>
+        <div className="project-contract-grid"><div><span>Base estimate</span><strong>{money(Number(estimate?.total ?? 0))}</strong></div><div><span>Approved changes</span><strong>{money(Math.max(0, contractTotal - Number(estimate?.total ?? 0)))}</strong></div><div><span>Current contract</span><strong>{money(contractTotal)}</strong></div></div>
+        {estimate?.scope && <div className="project-contract-copy"><h3>Scope of work</h3><p className="pre-line">{estimate.scope}</p></div>}
+        {estimate?.payment_schedule && <div className="project-contract-copy"><h3>Payment schedule</h3><p className="pre-line">{estimate.payment_schedule}</p></div>}
+      </section>
+
+      <section id="payments" className="panel project-payments-panel project-section-anchor">
+        <div className="panel-heading"><div><span className="project-overview-label">Payments</span><h2>{money(amountPaid)} received · {money(remaining)} remaining</h2><p>Every payment recorded for this project is shown below.</p></div><Link href={`/payments?project=${project.id}`} className="button button--gold"><CreditCard size={16}/>Open payment log</Link></div>
+        <div className="table-wrap"><table><thead><tr><th>Date</th><th>Method</th><th>Reference</th><th>Notes</th><th>Amount</th></tr></thead><tbody>{(payments ?? []).map((payment: any) => <tr key={payment.id}><td>{new Date(payment.received_at).toLocaleDateString()}</td><td className="capitalize">{payment.payment_method}</td><td>{payment.reference_number || "—"}</td><td>{payment.notes || "—"}</td><td><strong>{money(Number(payment.amount))}</strong></td></tr>)}{!payments?.length && <tr><td colSpan={5} className="empty-cell">No payments have been recorded for this project yet.</td></tr>}</tbody></table></div>
       </section>
 
       <LaborVsActual laborItems={(laborItems ?? []) as any} timeEntries={(timeEntries ?? []) as any}/>
@@ -104,13 +141,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div className="panel-heading"><div><h2>Change orders</h2><p>Project-linked scope changes with their own customer approval trail.</p></div><Link href={`/projects/${project.id}/change-orders/new`} className="button button--gold"><Plus size={16}/>New change order</Link></div>
         <div className="table-wrap"><table><thead><tr><th>Change order</th><th>Status</th><th>Date</th><th>Price change</th></tr></thead><tbody>{(changeOrders??[]).map((co:any)=><tr key={co.id}><td><Link className="table-link" href={`/change-orders/${co.id}`}>{co.change_order_number}<small>{co.title}</small></Link></td><td><StatusPill value={co.status}/></td><td>{new Date(co.created_at).toLocaleDateString()}</td><td>{money(co.total)}</td></tr>)}{!changeOrders?.length&&<tr><td colSpan={4} className="empty-cell">No change orders for this project.</td></tr>}</tbody></table></div>
       </section>
-
-      {(estimate?.scope || estimate?.payment_schedule) && (
-        <section className="panel project-detail-info">
-          {estimate?.scope && <div><h2>Scope</h2><p className="pre-line">{estimate.scope}</p></div>}
-          {estimate?.payment_schedule && <div><h2>Payment schedule</h2><p className="pre-line">{estimate.payment_schedule}</p></div>}
-        </section>
-      )}
 
       <ProjectMedia projectId={project.id} estimateId={estimateId} initialMedia={media}/>
     </div>
