@@ -12,7 +12,7 @@ export default async function DashboardPage() {
   since.setDate(since.getDate() - 8);
   since.setHours(0, 0, 0, 0);
 
-  const [customers, openEstimates, projects, payments, recent, activeProjects, recentTime] = await Promise.all([
+  const [customers, openEstimates, projects, payments, recent, activeProjects, recentTime, activeOwnerTime] = await Promise.all([
     supabase.from("customers").select("id", { count: "exact", head: true }),
     supabase.from("estimates").select("id,total,status", { count: "exact" }).in("status", ["draft", "sent", "viewed"]),
     supabase.from("projects").select("id", { count: "exact", head: true }).neq("status", "complete"),
@@ -29,10 +29,22 @@ export default async function DashboardPage() {
       .is("team_member_id", null)
       .gte("started_at", since.toISOString())
       .order("started_at", { ascending: false }),
+    supabase
+      .from("time_entries")
+      .select("id,project_id,started_at,ended_at,duration_minutes,projects(name,estimates(title))")
+      .is("team_member_id", null)
+      .is("ended_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const pipeline = (openEstimates.data ?? []).reduce((sum, row) => sum + Number(row.total), 0);
   const paid = (payments.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0);
+  const timeEntries = [...(recentTime.data ?? [])] as any[];
+  if (activeOwnerTime.data && !timeEntries.some((entry) => entry.id === activeOwnerTime.data?.id)) {
+    timeEntries.unshift(activeOwnerTime.data as any);
+  }
 
   return (
     <div className="page-wrap">
@@ -40,7 +52,7 @@ export default async function DashboardPage() {
 
       <SmartTimeDashboard
         projects={(activeProjects.data ?? []) as any}
-        entries={(recentTime.data ?? []) as any}
+        entries={timeEntries as any}
       />
 
       <section className="metric-grid">
