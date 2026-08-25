@@ -131,6 +131,10 @@
   margin: 0;
 }
 
+.project-overview-link { display:block; transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease; }
+.project-overview-link:hover { border-color:var(--gold); box-shadow:0 10px 32px rgba(18,49,40,.1); transform:translateY(-2px); }
+.project-overview-link small { color:var(--muted); display:block; margin-top:5px; }
+
 .project-overview-label {
   display: block;
   margin-bottom: 8px;
@@ -145,6 +149,8 @@
   min-height: 32px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .project-overview-number {
@@ -156,6 +162,9 @@
   display: grid;
   gap: 20px;
 }
+
+.project-linked-section { margin-bottom:18px; scroll-margin-top:22px; }
+.project-status-form { display:grid; grid-template-columns:minmax(260px,520px) auto; align-items:end; gap:12px; }
 
 .pre-line {
   white-space: pre-line;
@@ -279,6 +288,7 @@
   .project-media-grid {
     grid-template-columns: 1fr;
   }
+  .project-status-form { grid-template-columns:1fr; }
 }
 
 .time-tracker-stack {

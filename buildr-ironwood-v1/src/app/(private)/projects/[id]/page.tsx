@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ArrowLeft, Clock3, Pencil, Plus } from "lucide-react";
+import { revalidatePath } from "next/cache";
+import { notFound, redirect } from "next/navigation";
+import { ArrowLeft, ChevronRight, Clock3, Pencil, Plus } from "lucide-react";
 
 import { LaborVsActual } from "@/components/labor-vs-actual";
 import { PageHeader } from "@/components/page-header";
@@ -8,6 +9,20 @@ import { ProjectMedia } from "@/components/project-media";
 import { StatusPill } from "@/components/status-pill";
 import { money } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
+
+async function updateProjectStatus(formData: FormData) {
+  "use server";
+  const projectId = String(formData.get("project_id") ?? "");
+  const status = String(formData.get("status") ?? "");
+  const allowedStatuses = ["scheduled", "in_progress", "waiting", "on_hold", "substantially_complete", "complete"];
+  if (!projectId || !allowedStatuses.includes(status)) return;
+  const supabase = await createClient();
+  const { error } = await supabase.from("projects").update({ status }).eq("id", projectId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  redirect(`/projects/${projectId}#project-status`);
+}
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -26,7 +41,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const estimate = project.estimates as any;
   const estimateId = estimate?.id ?? null;
 
-  const [{ data: mediaRows }, { data: laborItems }, { data: timeEntries }, { data: changeOrders }] = await Promise.all([
+  const [{ data: mediaRows }, { data: laborItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }] = await Promise.all([
     supabase
       .from("project_media")
       .select("id,storage_path,file_name,category,room_location,caption,customer_visible,created_at")
@@ -50,6 +65,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .select("id,change_order_number,title,status,total,created_at,accepted_at")
       .eq("project_id", id)
       .order("created_at", { ascending: false }),
+    supabase.from("payments").select("id").eq("project_id", id),
   ]);
 
   const media = await Promise.all((mediaRows ?? []).map(async (item) => {
@@ -62,6 +78,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const contractTotal = Number(project.contract_total ?? estimate?.total ?? 0);
   const amountPaid = Number(project.amount_paid ?? 0);
   const remaining = Math.max(0, contractTotal - amountPaid);
+  const baseContract = Number(estimate?.total ?? contractTotal);
+  const acceptedChangeOrders = (changeOrders ?? []).filter((co: any) => co.status === "accepted");
+  const approvedChangesTotal = acceptedChangeOrders.reduce((sum: number, co: any) => sum + Number(co.total ?? 0), 0);
+  const paymentCount = payments?.length ?? 0;
 
   return (
     <div className="page-wrap">
@@ -92,10 +112,24 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <section className="project-overview-grid">
-        <article className="panel"><span className="project-overview-label">Status</span><div className="project-overview-value"><StatusPill value={project.status}/></div></article>
-        <article className="panel"><span className="project-overview-label">Contract</span><strong className="project-overview-number">{money(contractTotal)}</strong></article>
-        <article className="panel"><span className="project-overview-label">Paid</span><strong className="project-overview-number">{money(amountPaid)}</strong></article>
-        <article className="panel"><span className="project-overview-label">Remaining</span><strong className="project-overview-number">{money(remaining)}</strong></article>
+        <Link className="panel project-overview-link" href="#project-status"><span className="project-overview-label">Status</span><div className="project-overview-value"><StatusPill value={project.status}/><ChevronRight size={18}/></div><small>View or change status</small></Link>
+        <Link className="panel project-overview-link" href="#contract-details"><span className="project-overview-label">Contract</span><div className="project-overview-value"><strong className="project-overview-number">{money(contractTotal)}</strong><ChevronRight size={18}/></div><small>View contract details</small></Link>
+        <Link className="panel project-overview-link" href={`/payments?project=${project.id}`}><span className="project-overview-label">Paid</span><div className="project-overview-value"><strong className="project-overview-number">{money(amountPaid)}</strong><ChevronRight size={18}/></div><small>{paymentCount ? `View ${paymentCount} payment${paymentCount === 1 ? "" : "s"}` : "Open payment log"}</small></Link>
+        <Link className="panel project-overview-link" href={`/payments?project=${project.id}`}><span className="project-overview-label">Remaining</span><div className="project-overview-value"><strong className="project-overview-number">{money(remaining)}</strong><ChevronRight size={18}/></div><small>View payments and balance</small></Link>
+      </section>
+
+      <section id="project-status" className="panel project-linked-section">
+        <div className="panel-heading"><div><h2>Project status</h2><p>Keep the job stage current so it is clear what needs attention next.</p></div><StatusPill value={project.status}/></div>
+        <form action={updateProjectStatus} className="project-status-form">
+          <input type="hidden" name="project_id" value={project.id}/>
+          <label>Change status<select name="status" defaultValue={project.status}><option value="scheduled">Scheduled</option><option value="in_progress">In progress</option><option value="waiting">Waiting on customer, material, or trade</option><option value="on_hold">On hold</option><option value="substantially_complete">Substantially complete</option><option value="complete">Complete</option></select></label>
+          <button className="button button--gold">Update status</button>
+        </form>
+      </section>
+
+      <section id="contract-details" className="panel project-linked-section">
+        <div className="panel-heading"><div><h2>Contract details</h2><p>The accepted base proposal plus approved project changes.</p></div>{estimateId && <Link href={`/estimates/${estimateId}`}>View accepted proposal <ChevronRight size={16}/></Link>}</div>
+        <dl className="totals totals--right"><div><dt>Base contract</dt><dd>{money(baseContract)}</dd></div><div><dt>Approved change orders ({acceptedChangeOrders.length})</dt><dd>{money(approvedChangesTotal)}</dd></div><div className="grand"><dt>Current contract</dt><dd>{money(contractTotal)}</dd></div></dl>
       </section>
 
       <LaborVsActual laborItems={(laborItems ?? []) as any} timeEntries={(timeEntries ?? []) as any}/>
