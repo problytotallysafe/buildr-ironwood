@@ -26,6 +26,7 @@ export default async function DashboardPage() {
     supabase
       .from("time_entries")
       .select("id,project_id,started_at,ended_at,duration_minutes,projects(name,estimates(title))")
+      .is("team_member_id", null)
       .gte("started_at", since.toISOString())
       .order("started_at", { ascending: false }),
   ]);
