@@ -24,7 +24,6 @@ export default function LoginPage() {
     <main className="login-page">
       <section className="login-panel">
         <IronwoodLogo />
-        <div className="login-product">BUILDR</div>
         <h1>Your remodeling business, organized.</h1>
         <p>Customers, detailed estimates, proposal approvals, project progress, and payments in one place.</p>
         <form onSubmit={submit} className="stack">

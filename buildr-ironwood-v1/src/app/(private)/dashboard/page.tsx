@@ -56,10 +56,10 @@ export default async function DashboardPage() {
       />
 
       <section className="metric-grid">
-        <article className="metric"><Users /><span>Customers</span><strong>{customers.count ?? 0}</strong></article>
-        <article className="metric"><FileText /><span>Open estimates</span><strong>{openEstimates.count ?? 0}</strong><small>{money(pipeline)} pipeline</small></article>
-        <article className="metric"><FileCheck2 /><span>Active projects</span><strong>{projects.count ?? 0}</strong></article>
-        <article className="metric"><CircleDollarSign /><span>Paid this month</span><strong>{money(paid)}</strong></article>
+        <Link className="metric metric--link" href="/customers"><Users /><span>Customers</span><strong>{customers.count ?? 0}</strong><small>View customers <ArrowRight size={13}/></small></Link>
+        <Link className="metric metric--link" href="/estimates"><FileText /><span>Open estimates</span><strong>{openEstimates.count ?? 0}</strong><small>{money(pipeline)} pipeline <ArrowRight size={13}/></small></Link>
+        <Link className="metric metric--link" href="/projects"><FileCheck2 /><span>Active projects</span><strong>{projects.count ?? 0}</strong><small>View projects <ArrowRight size={13}/></small></Link>
+        <Link className="metric metric--link" href="/payments"><CircleDollarSign /><span>Paid this month</span><strong>{money(paid)}</strong><small>View payments <ArrowRight size={13}/></small></Link>
       </section>
       <section className="panel">
         <div className="panel-heading"><div><h2>Recent estimates</h2><p>Your latest proposals and their customer activity.</p></div><Link href="/estimates">View all <ArrowRight size={16}/></Link></div>
