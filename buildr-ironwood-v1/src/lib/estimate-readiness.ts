@@ -10,6 +10,9 @@ export type SavedEstimateItemForReadiness = {
   description?: string | null;
   unit_cost?: number | string | null;
   quantity?: number | string | null;
+  selection_status?: string | null;
+  selected_product?: string | null;
+  selection_notes?: string | null;
 };
 
 export function getEstimateSendWarnings(
@@ -27,6 +30,10 @@ export function getEstimateSendWarnings(
   if (items.some((item) => !item.description?.trim())) warnings.push("One or more line items are missing a description");
   if (items.some((item) => Number(item.unit_cost ?? 0) === 0)) warnings.push("One or more line items have a $0 cost");
   if (items.some((item) => Number(item.quantity ?? 0) <= 0)) warnings.push("One or more line items have no quantity");
+  if (items.some((item) => item.selection_status === "undecided")) warnings.push("One or more selections are still undecided");
+  if (items.some((item) => item.selection_status === "allowance" && Number(item.unit_cost ?? 0) === 0)) warnings.push("One or more allowances have no budget amount");
+  if (items.some((item) => item.selection_status === "customer_supplied" && !item.selected_product?.trim() && !item.selection_notes?.trim())) warnings.push("One or more customer-supplied items are not described");
+  if (items.some((item) => item.selection_status === "excluded" && Number(item.unit_cost ?? 0) !== 0)) warnings.push("An excluded item still has a cost included");
 
   return warnings;
 }

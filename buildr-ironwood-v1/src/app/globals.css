@@ -97,6 +97,44 @@
   }
 }
 
+.selection-fields {
+  margin-top: 4px;
+  padding: 14px;
+  border: 1px solid rgba(197, 154, 82, 0.38);
+  border-radius: 12px;
+  background: rgba(245, 240, 230, 0.65);
+}
+
+.selection-fields__heading {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.selection-fields__heading strong { color: var(--green); }
+.selection-fields__heading small { color: var(--muted); }
+.selection-summary { color: #7b5a20; font-weight: 750; }
+.proposal-selections > p { color: var(--muted); margin-top: -8px; }
+
+.selection-card-list { display: grid; gap: 10px; }
+.selection-card-list article {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.selection-card-list article > div { display: flex; justify-content: space-between; gap: 12px; }
+.selection-card-list article span {
+  color: #7b5a20;
+  font-size: .72rem;
+  font-weight: 850;
+  text-transform: capitalize;
+}
+.selection-card-list article b { color: var(--green); }
+.selection-card-list article small { color: var(--muted); }
+
 .project-table-link {
   color: inherit;
   font-weight: 800;

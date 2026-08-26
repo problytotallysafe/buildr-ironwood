@@ -59,4 +59,9 @@ export type EstimateItemDraft = {
   vendor_sku: string;
   vendor_url: string;
   private_notes: string;
+  selection_status: "final" | "allowance" | "customer_supplied" | "undecided" | "excluded";
+  selection_responsibility: "ironwood" | "customer";
+  selection_deadline: string;
+  selected_product: string;
+  selection_notes: string;
 };

@@ -41,7 +41,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const estimate = project.estimates as any;
   const estimateId = estimate?.id ?? null;
 
-  const [{ data: mediaRows }, { data: laborItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }] = await Promise.all([
+  const [{ data: mediaRows }, { data: laborItems }, { data: selectionItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }] = await Promise.all([
     supabase
       .from("project_media")
       .select("id,storage_path,file_name,category,room_location,caption,customer_visible,created_at")
@@ -54,6 +54,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           .eq("estimate_id", estimateId)
           .eq("item_type", "labor")
           .order("sort_order")
+      : Promise.resolve({ data: [] } as any),
+    estimateId
+      ? supabase
+          .from("estimate_items")
+          .select("id,description,line_total,selection_status,selection_responsibility,selection_deadline,selected_product,selection_notes")
+          .eq("estimate_id", estimateId)
+          .neq("selection_status", "final")
+          .order("selection_deadline", { ascending: true, nullsFirst: false })
       : Promise.resolve({ data: [] } as any),
     supabase
       .from("time_entries")
@@ -129,6 +137,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         {estimate?.scope && <div className="project-contract-copy"><h3>Scope of work</h3><p className="pre-line">{estimate.scope}</p></div>}
         {estimate?.payment_schedule && <div className="project-contract-copy"><h3>Payment schedule</h3><p className="pre-line">{estimate.payment_schedule}</p></div>}
       </section>
+
+      {(selectionItems ?? []).length > 0 && <section id="selections" className="panel project-section-anchor">
+        <div className="panel-heading"><div><span className="project-overview-label">Selections & allowances</span><h2>Decisions to keep the job moving</h2><p>These responsibilities and deadlines came directly from the accepted estimate.</p></div><strong>{selectionItems?.length} open</strong></div>
+        <div className="selection-card-list">{selectionItems?.map((item: any) => <article key={item.id}><div><strong>{item.description}</strong><span>{String(item.selection_status).replaceAll("_", " ")}</span></div>{item.selection_status === "allowance" && <b>{money(item.line_total)} allowance</b>}<small>{[item.selection_responsibility === "customer" ? "Customer responsible" : "Ironwood responsible", item.selected_product, item.selection_deadline ? `Decide by ${new Date(`${item.selection_deadline}T12:00:00`).toLocaleDateString()}` : null, item.selection_notes].filter(Boolean).join(" · ")}</small></article>)}</div>
+      </section>}
 
       <section id="payments" className="panel project-payments-panel project-section-anchor">
         <div className="panel-heading"><div><span className="project-overview-label">Payments</span><h2>{money(amountPaid)} received · {money(remaining)} remaining</h2><p>Every payment recorded for this project is shown below.</p></div><Link href={`/payments?project=${project.id}`} className="button button--gold"><CreditCard size={16}/>Open payment log</Link></div>

@@ -67,6 +67,11 @@ type InitialEstimate = {
       vendor_sku: string | null;
       vendor_url: string | null;
       private_notes: string | null;
+      selection_status: EstimateItemDraft["selection_status"] | null;
+      selection_responsibility: EstimateItemDraft["selection_responsibility"] | null;
+      selection_deadline: string | null;
+      selected_product: string | null;
+      selection_notes: string | null;
       sort_order: number;
     }>;
   }>;
@@ -128,6 +133,11 @@ function blankItem(markup = 20): EstimateItemDraft {
     vendor_sku: "",
     vendor_url: "",
     private_notes: "",
+    selection_status: "final",
+    selection_responsibility: "ironwood",
+    selection_deadline: "",
+    selected_product: "",
+    selection_notes: "",
   };
 }
 
@@ -169,6 +179,11 @@ function loadSections(
           vendor_sku: item.vendor_sku || "",
           vendor_url: item.vendor_url || "",
           private_notes: item.private_notes || "",
+          selection_status: item.selection_status || "final",
+          selection_responsibility: item.selection_responsibility || "ironwood",
+          selection_deadline: item.selection_deadline || "",
+          selected_product: item.selected_product || "",
+          selection_notes: item.selection_notes || "",
         })),
     }));
 }
@@ -334,6 +349,9 @@ export function EstimateBuilder({
     if (!schedule.trim()) warnings.push("Add the payment schedule");
     if (!completedItems.length) warnings.push("Add at least one priced line item");
     if (completedItems.some((item) => Number(item.unit_cost) === 0)) warnings.push("Review line items with a $0 cost");
+    if (completedItems.some((item) => item.selection_status === "undecided")) warnings.push("Resolve or acknowledge undecided selections");
+    if (completedItems.some((item) => item.selection_status === "allowance" && Number(item.unit_cost) === 0)) warnings.push("Enter an amount for every allowance");
+    if (completedItems.some((item) => item.selection_status === "customer_supplied" && !item.selected_product.trim() && !item.selection_notes.trim())) warnings.push("Describe customer-supplied items");
     return warnings;
   }, [address, allItems, customerId, exclusions, schedule, scope, title]);
 
@@ -635,6 +653,11 @@ export function EstimateBuilder({
               vendor_sku: item.vendor_sku.trim() || null,
               vendor_url: item.vendor_url.trim() || null,
               private_notes: item.private_notes.trim() || null,
+              selection_status: item.selection_status,
+              selection_responsibility: item.selection_responsibility,
+              selection_deadline: item.selection_deadline || null,
+              selected_product: item.selected_product.trim() || null,
+              selection_notes: item.selection_notes.trim() || null,
               line_subtotal: baseCost,
               line_markup: lineMarkup,
               line_total: baseCost + lineMarkup,
@@ -1013,6 +1036,79 @@ export function EstimateBuilder({
                             </label>
                           </>
                         )}
+
+                        <div className="span-2 selection-fields">
+                          <div className="selection-fields__heading">
+                            <strong>Selection / allowance</strong>
+                            <small>Track what is decided, who is responsible, and what still needs attention.</small>
+                          </div>
+                          <div className="form-grid">
+                            <label>
+                              Status
+                              <select
+                                value={item.selection_status}
+                                onChange={(event) => {
+                                  const status = event.target.value as EstimateItemDraft["selection_status"];
+                                  patchItem(section.clientId, itemIndex, {
+                                    selection_status: status,
+                                    item_type: status === "allowance" ? "allowance" : item.item_type,
+                                    selection_responsibility: status === "customer_supplied" ? "customer" : item.selection_responsibility,
+                                  });
+                                }}
+                              >
+                                <option value="final">Final selection</option>
+                                <option value="allowance">Allowance</option>
+                                <option value="customer_supplied">Customer supplied</option>
+                                <option value="undecided">Undecided</option>
+                                <option value="excluded">Excluded</option>
+                              </select>
+                            </label>
+                            <label>
+                              Responsible party
+                              <select
+                                value={item.selection_responsibility}
+                                onChange={(event) =>
+                                  patchItem(section.clientId, itemIndex, {
+                                    selection_responsibility: event.target.value as EstimateItemDraft["selection_responsibility"],
+                                  })
+                                }
+                              >
+                                <option value="ironwood">Ironwood</option>
+                                <option value="customer">Customer</option>
+                              </select>
+                            </label>
+                            <label>
+                              Decision deadline
+                              <input
+                                type="date"
+                                value={item.selection_deadline}
+                                onChange={(event) =>
+                                  patchItem(section.clientId, itemIndex, { selection_deadline: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label>
+                              {item.selection_status === "allowance" ? "Allowance choice / category" : "Selected product"}
+                              <input
+                                value={item.selected_product}
+                                onChange={(event) =>
+                                  patchItem(section.clientId, itemIndex, { selected_product: event.target.value })
+                                }
+                                placeholder={item.selection_status === "allowance" ? "Vanity, tile, faucet…" : "Brand, model, color, finish…"}
+                              />
+                            </label>
+                            <label className="span-2">
+                              Selection notes
+                              <input
+                                value={item.selection_notes}
+                                onChange={(event) =>
+                                  patchItem(section.clientId, itemIndex, { selection_notes: event.target.value })
+                                }
+                                placeholder="What is still needed or what the customer is providing"
+                              />
+                            </label>
+                          </div>
+                        </div>
 
                         <label className="span-2">
                           Private line note
