@@ -12,9 +12,11 @@ import {
   CreditCard,
   FileText,
   LineChart,
+  Inbox,
   ShieldCheck,
   LogOut,
   Menu,
+  Bell,
   Settings,
   Square,
   Users,
@@ -27,9 +29,11 @@ import { IronwoodLogo } from "./ironwood-logo";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/today", label: "Project Today", icon: CalendarCheck2 },
   { href: "/site-visits", label: "Site Visits", icon: ClipboardList },
   { href: "/customers", label: "Customers", icon: Users },
+  { href: "/leads", label: "Leads", icon: Inbox },
   { href: "/estimates", label: "Estimates", icon: FileText },
   { href: "/independence", label: "Independence", icon: ShieldCheck },
   { href: "/projects", label: "Projects", icon: BriefcaseBusiness },
@@ -38,6 +42,7 @@ const nav = [
   { href: "/analytics", label: "Analytics", icon: LineChart },
   { href: "/catalog", label: "Price Book", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/settings/team", label: "Team & Logins", icon: Users },
 ];
 
 type ActiveTime = {
@@ -124,8 +129,6 @@ export function AppShell({
         <div className="sidebar-brand">
           <IronwoodLogo />
           <button className="sidebar-close" onClick={() => setOpen(false)} aria-label="Close navigation"><X /></button>
-          <div className="product-name">BUILDR</div>
-          <div className="product-tagline">Estimate. Build. Get paid.</div>
         </div>
 
         <nav className="side-nav">

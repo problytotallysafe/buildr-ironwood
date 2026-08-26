@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Save } from "lucide-react";
+import { CustomerSelect } from "@/components/customer-select";
 
 export function SiteVisitForm({ action, customers, projects, estimates, worksheet }: {
   action: (formData: FormData) => Promise<void>;
@@ -12,7 +13,7 @@ export function SiteVisitForm({ action, customers, projects, estimates, workshee
   const area = (name: string, label: string, placeholder: string, rows = 4) => <label className="span-2">{label}<textarea name={name} rows={rows} defaultValue={worksheet?.[name] ?? ""} placeholder={placeholder}/></label>;
   return <form action={action} className="stack">
     <section className="panel form-grid">
-      <label>Customer<select name="customer_id" required defaultValue={customerId}><option value="">Choose customer…</option>{customers.map((customer: any) => <option key={customer.id} value={customer.id}>{customer.first_name} {customer.last_name}{customer.company_name ? ` — ${customer.company_name}` : ""}</option>)}</select></label>
+      <label>Customer<CustomerSelect customers={customers} defaultValue={customerId}/></label>
       <label>Visit date<input type="date" name="visit_date" required defaultValue={worksheet?.visit_date ?? new Date().toISOString().slice(0, 10)}/></label>
       <label>Project type<input name="project_type" defaultValue={worksheet?.project_type ?? ""} placeholder="Bathroom, kitchen, whole home…"/></label>
       <label>People present<input name="people_present" defaultValue={worksheet?.people_present ?? ""} placeholder="Homeowners, designer, subcontractor…"/></label>
