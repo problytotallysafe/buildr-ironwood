@@ -18,6 +18,7 @@ export default async function EditEstimatePage({
     { data: settings },
     { data: sections },
     { data: items },
+    { data: paymentMilestones },
   ] = await Promise.all([
     supabase.from("estimates").select("*").eq("id", id).single(),
     supabase
@@ -35,6 +36,11 @@ export default async function EditEstimatePage({
       .order("sort_order"),
     supabase
       .from("estimate_items")
+      .select("*")
+      .eq("estimate_id", id)
+      .order("sort_order"),
+    supabase
+      .from("estimate_payment_milestones")
       .select("*")
       .eq("estimate_id", id)
       .order("sort_order"),
@@ -82,6 +88,7 @@ export default async function EditEstimatePage({
         initialEstimate={{
           ...estimate,
           sections: sectionList,
+          payment_milestones: paymentMilestones ?? [],
         }}
       />
     </div>

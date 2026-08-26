@@ -34,6 +34,15 @@ type EstimateSectionDraft = {
   items: EstimateItemDraft[];
 };
 
+type PaymentMilestoneDraft = {
+  clientId: string;
+  title: string;
+  amount_type: "percentage" | "fixed";
+  amount_value: number;
+  due_trigger: string;
+  due_date: string;
+};
+
 type InitialEstimate = {
   id: string;
   status: string;
@@ -46,6 +55,15 @@ type InitialEstimate = {
   customer_notes: string | null;
   private_notes: string | null;
   payment_schedule: string | null;
+  payment_milestones?: Array<{
+    id: string;
+    title: string;
+    amount_type: "percentage" | "fixed";
+    amount_value: number | string;
+    due_trigger: string | null;
+    due_date: string | null;
+    sort_order: number;
+  }>;
   independence_assessment_id?: string | null;
   tax_rate: number | string | null;
   default_markup_rate: number | string | null;
@@ -101,6 +119,7 @@ type EstimateDraft = {
   taxRate: number;
   markupRate: number;
   sections: EstimateSectionDraft[];
+  milestones: PaymentMilestoneDraft[];
   savedAt: string;
 };
 
@@ -148,6 +167,14 @@ function blankSection(title = "General", markup = 20): EstimateSectionDraft {
     description: "",
     items: [blankItem(markup)],
   };
+}
+
+function defaultMilestones(): PaymentMilestoneDraft[] {
+  return [
+    { clientId: makeId(), title: "Initial deposit", amount_type: "percentage", amount_value: 30, due_trigger: "Due upon acceptance to reserve scheduling", due_date: "" },
+    { clientId: makeId(), title: "Progress payment", amount_type: "percentage", amount_value: 40, due_trigger: "Due at the agreed midpoint of work", due_date: "" },
+    { clientId: makeId(), title: "Final payment", amount_type: "percentage", amount_value: 30, due_trigger: "Due at final walkthrough", due_date: "" },
+  ];
 }
 
 function loadSections(
@@ -248,6 +275,20 @@ export function EstimateBuilder({
           }))
         : loadSections(initialEstimate, startingMarkup),
   );
+  const [milestones, setMilestones] = useState<PaymentMilestoneDraft[]>(
+    initialEstimate?.payment_milestones?.length
+      ? [...initialEstimate.payment_milestones]
+          .sort((a, b) => Number(a.sort_order) - Number(b.sort_order))
+          .map((milestone) => ({
+            clientId: milestone.id || makeId(),
+            title: milestone.title,
+            amount_type: milestone.amount_type,
+            amount_value: Number(milestone.amount_value),
+            due_trigger: milestone.due_trigger || "",
+            due_date: milestone.due_date || "",
+          }))
+      : defaultMilestones(),
+  );
   const [draftReady, setDraftReady] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<EstimateDraft | null>(null);
   const [draftStatus, setDraftStatus] = useState<"waiting" | "saving" | "saved">("waiting");
@@ -290,7 +331,7 @@ export function EstimateBuilder({
       const savedAt = new Date().toISOString();
       const draft: EstimateDraft = {
         customerId, title, address, scope, exclusions, notes, privateNotes,
-        revisionReason, schedule, taxRate, markupRate, sections, savedAt,
+        revisionReason, schedule, taxRate, markupRate, sections, milestones, savedAt,
       };
       window.localStorage.setItem(draftKey, JSON.stringify(draft));
       setLastDraftSaved(savedAt);
@@ -299,7 +340,7 @@ export function EstimateBuilder({
     return () => window.clearTimeout(timer);
   }, [
     address, customerId, draftKey, draftReady, exclusions, markupRate, notes,
-    privateNotes, revisionReason, schedule, scope, sections, taxRate, title,
+    privateNotes, revisionReason, schedule, scope, sections, milestones, taxRate, title,
   ]);
 
   useEffect(() => {
@@ -325,6 +366,7 @@ export function EstimateBuilder({
     setTaxRate(Number(pendingDraft.taxRate));
     setMarkupRate(Number(pendingDraft.markupRate));
     setSections(pendingDraft.sections);
+    setMilestones(pendingDraft.milestones ?? defaultMilestones());
     setPendingDraft(null);
     setDraftReady(true);
     setDraftStatus("saved");
@@ -347,13 +389,18 @@ export function EstimateBuilder({
     if (!scope.trim()) warnings.push("Write the detailed scope of work");
     if (!exclusions.trim()) warnings.push("Confirm exclusions and owner-supplied items");
     if (!schedule.trim()) warnings.push("Add the payment schedule");
+    if (!milestones.length) warnings.push("Add at least one payment milestone");
+    const percentageTotal = milestones.filter((milestone) => milestone.amount_type === "percentage").reduce((sum, milestone) => sum + Number(milestone.amount_value || 0), 0);
+    const hasFixedMilestones = milestones.some((milestone) => milestone.amount_type === "fixed");
+    if (!hasFixedMilestones && Math.abs(percentageTotal - 100) > 0.001) warnings.push(`Payment milestones total ${percentageTotal}% instead of 100%`);
+    if (milestones.some((milestone) => !milestone.title.trim() || Number(milestone.amount_value) <= 0)) warnings.push("Complete every payment milestone");
     if (!completedItems.length) warnings.push("Add at least one priced line item");
     if (completedItems.some((item) => Number(item.unit_cost) === 0)) warnings.push("Review line items with a $0 cost");
     if (completedItems.some((item) => item.selection_status === "undecided")) warnings.push("Resolve or acknowledge undecided selections");
     if (completedItems.some((item) => item.selection_status === "allowance" && Number(item.unit_cost) === 0)) warnings.push("Enter an amount for every allowance");
     if (completedItems.some((item) => item.selection_status === "customer_supplied" && !item.selected_product.trim() && !item.selection_notes.trim())) warnings.push("Describe customer-supplied items");
     return warnings;
-  }, [address, allItems, customerId, exclusions, schedule, scope, title]);
+  }, [address, allItems, customerId, exclusions, milestones, schedule, scope, title]);
 
   function patchSection(
     sectionId: string,
@@ -581,6 +628,16 @@ export function EstimateBuilder({
           setError(deleteSectionsError.message);
           return;
         }
+
+        const { error: deleteMilestonesError } = await supabase
+          .from("estimate_payment_milestones")
+          .delete()
+          .eq("estimate_id", estimateId);
+
+        if (deleteMilestonesError) {
+          setError(deleteMilestonesError.message);
+          return;
+        }
       } else {
         const { data: estimate, error: estimateError } = await supabase
           .from("estimates")
@@ -672,6 +729,30 @@ export function EstimateBuilder({
       if (itemError) {
         setError(itemError.message);
         return;
+      }
+
+      const milestoneRows = milestones
+        .filter((milestone) => milestone.title.trim() && Number(milestone.amount_value) > 0)
+        .map((milestone, index) => ({
+          owner_id: user.id,
+          estimate_id: estimateId,
+          title: milestone.title.trim(),
+          amount_type: milestone.amount_type,
+          amount_value: Number(milestone.amount_value),
+          due_trigger: milestone.due_trigger.trim() || null,
+          due_date: milestone.due_date || null,
+          sort_order: index,
+        }));
+
+      if (milestoneRows.length) {
+        const { error: milestoneError } = await supabase
+          .from("estimate_payment_milestones")
+          .insert(milestoneRows);
+
+        if (milestoneError) {
+          setError(milestoneError.message);
+          return;
+        }
       }
 
       window.localStorage.removeItem(draftKey);
@@ -1188,6 +1269,29 @@ export function EstimateBuilder({
               onChange={(event) => setSchedule(event.target.value)}
             />
           </label>
+
+          <div className="span-2 payment-milestones-editor">
+            <div className="selection-fields__heading">
+              <strong>Payment milestones</strong>
+              <small>Build the actual deposit, progress draws, and final payment the customer will see.</small>
+            </div>
+            <div className="payment-milestone-list">
+              {milestones.map((milestone, index) => {
+                const calculatedAmount = milestone.amount_type === "percentage"
+                  ? totals.total * Number(milestone.amount_value || 0) / 100
+                  : Number(milestone.amount_value || 0);
+                return <article key={milestone.clientId}>
+                  <label>Milestone<input value={milestone.title} onChange={(event) => setMilestones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))}/></label>
+                  <label>Amount type<select value={milestone.amount_type} onChange={(event) => setMilestones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount_type: event.target.value as PaymentMilestoneDraft["amount_type"] } : item))}><option value="percentage">Percent</option><option value="fixed">Fixed amount</option></select></label>
+                  <label>{milestone.amount_type === "percentage" ? "Percent" : "Amount"}<input type="number" min="0" max={milestone.amount_type === "percentage" ? 100 : undefined} step="0.01" value={milestone.amount_value} onChange={(event) => setMilestones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount_value: Number(event.target.value) } : item))}/></label>
+                  <label>Trigger / when due<input value={milestone.due_trigger} onChange={(event) => setMilestones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, due_trigger: event.target.value } : item))} placeholder="After cabinets are installed"/></label>
+                  <label>Specific date (optional)<input type="date" value={milestone.due_date} onChange={(event) => setMilestones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, due_date: event.target.value } : item))}/></label>
+                  <div className="payment-milestone-total"><span>Expected</span><strong>{money(calculatedAmount)}</strong><button type="button" className="icon-button danger" aria-label="Remove milestone" onClick={() => setMilestones((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={16}/></button></div>
+                </article>;
+              })}
+            </div>
+            <button type="button" className="button button--outline" onClick={() => setMilestones((current) => [...current, { clientId: makeId(), title: `Progress payment ${current.length}`, amount_type: "percentage", amount_value: 0, due_trigger: "", due_date: "" }])}><Plus size={16}/>Add payment milestone</button>
+          </div>
 
           <label className="span-2">
             Private Ironwood notes
