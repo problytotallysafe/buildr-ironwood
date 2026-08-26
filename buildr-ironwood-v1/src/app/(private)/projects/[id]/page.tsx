@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronRight, Clock3, CreditCard, FileText, Pencil, Plus } f
 import { LaborVsActual } from "@/components/labor-vs-actual";
 import { PageHeader } from "@/components/page-header";
 import { ProjectMedia } from "@/components/project-media";
+import { ProjectCloseout } from "@/components/project-closeout";
 import { StatusPill } from "@/components/status-pill";
 import { money } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
@@ -41,7 +42,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const estimate = project.estimates as any;
   const estimateId = estimate?.id ?? null;
 
-  const [{ data: mediaRows }, { data: laborItems }, { data: selectionItems }, { data: paymentMilestones }, { data: timeEntries }, { data: changeOrders }, { data: payments }] = await Promise.all([
+  const [{ data: mediaRows }, { data: laborItems }, { data: paymentMilestones }, { data: selectionItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }, { data: closeout }, { data: punchItems }] = await Promise.all([
     supabase
       .from("project_media")
       .select("id,storage_path,file_name,category,room_location,caption,customer_visible,created_at")
@@ -85,6 +86,16 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .select("id,amount,payment_method,reference_number,notes,received_at,milestone_id")
       .eq("project_id", id)
       .order("received_at", { ascending: false }),
+    supabase
+      .from("project_closeouts")
+      .select("*")
+      .eq("project_id", id)
+      .maybeSingle(),
+    supabase
+      .from("project_punch_items")
+      .select("*")
+      .eq("project_id", id)
+      .order("created_at"),
   ]);
 
   const media = await Promise.all((mediaRows ?? []).map(async (item) => {
@@ -131,6 +142,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <Link className="panel project-overview-link" href="#contract"><span className="project-overview-label">Contract</span><div className="project-overview-value"><strong className="project-overview-number">{money(contractTotal)}</strong><ChevronRight size={18}/></div></Link>
         <Link className="panel project-overview-link" href="#payments"><span className="project-overview-label">Paid</span><div className="project-overview-value"><strong className="project-overview-number">{money(amountPaid)}</strong><ChevronRight size={18}/></div></Link>
         <Link className="panel project-overview-link" href="#payments"><span className="project-overview-label">Remaining</span><div className="project-overview-value"><strong className="project-overview-number">{money(remaining)}</strong><ChevronRight size={18}/></div></Link>
+        <Link className="panel project-overview-link" href="#closeout"><span className="project-overview-label">Punch list</span><div className="project-overview-value"><strong className="project-overview-number">{(punchItems ?? []).filter((item: any) => item.status !== "complete").length} open</strong><ChevronRight size={18}/></div></Link>
       </section>
 
       <section id="status" className="panel project-status-panel project-section-anchor">
@@ -162,6 +174,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div className="panel-heading"><div><h2>Change orders</h2><p>Project-linked scope changes with their own customer approval trail.</p></div><Link href={`/projects/${project.id}/change-orders/new`} className="button button--gold"><Plus size={16}/>New change order</Link></div>
         <div className="table-wrap"><table><thead><tr><th>Change order</th><th>Status</th><th>Date</th><th>Price change</th></tr></thead><tbody>{(changeOrders??[]).map((co:any)=><tr key={co.id}><td><Link className="table-link" href={`/change-orders/${co.id}`}>{co.change_order_number}<small>{co.title}</small></Link></td><td><StatusPill value={co.status}/></td><td>{new Date(co.created_at).toLocaleDateString()}</td><td>{money(co.total)}</td></tr>)}{!changeOrders?.length&&<tr><td colSpan={4} className="empty-cell">No change orders for this project.</td></tr>}</tbody></table></div>
       </section>
+
+      <ProjectCloseout projectId={project.id} initialCloseout={closeout} initialItems={punchItems ?? []}/>
 
       <ProjectMedia projectId={project.id} estimateId={estimateId} initialMedia={media}/>
     </div>
