@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { AlertTriangle, CalendarDays, Check, Clock3, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarDays, Check, ClipboardCheck, Clock3, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/money";
@@ -47,11 +47,12 @@ async function deleteTask(formData: FormData) {
 export default async function TodayPage() {
   const supabase = await createClient();
   const today = localDateKey();
-  const [{ data: projects }, { data: tasks }, { data: selections }, { data: milestones }, { data: activeTime }] = await Promise.all([
+  const [{ data: projects }, { data: tasks }, { data: selections }, { data: milestones }, { data: punchItems }, { data: activeTime }] = await Promise.all([
     supabase.from("projects").select("id,name,status,project_address,customers(first_name,last_name),estimates(id,estimate_number,total)").in("status", ["scheduled", "in_progress", "waiting", "on_hold"]).order("created_at", { ascending: false }),
     supabase.from("project_tasks").select("*,projects(id,name)").order("status").order("due_date", { ascending: true, nullsFirst: false }).order("priority", { ascending: false }),
     supabase.from("estimate_items").select("id,estimate_id,description,selection_status,selection_responsibility,selection_deadline,estimates(projects(id,name))").in("selection_status", ["allowance", "undecided", "customer_supplied"]).not("selection_deadline", "is", null).lte("selection_deadline", today).order("selection_deadline"),
     supabase.from("estimate_payment_milestones").select("id,estimate_id,title,amount_type,amount_value,due_trigger,due_date,estimates(total,projects(id,name))").not("due_date", "is", null).lte("due_date", today).order("due_date"),
+    supabase.from("project_punch_items").select("id,project_id,description,room_location,responsible_party,due_date,priority,projects(name)").eq("status", "open").or(`due_date.lte.${today},priority.in.(high,urgent)`).order("due_date", { ascending: true, nullsFirst: false }),
     supabase.from("time_entries").select("id,project_id,started_at,projects(name)").is("ended_at", null).maybeSingle(),
   ]);
 
@@ -76,7 +77,8 @@ export default async function TodayPage() {
       <div className="stack">
         <section className="panel"><div className="panel-heading"><div><h2>Needs attention</h2><p>Overdue, due today, or marked high priority.</p></div><strong className="today-count">{urgent.length}</strong></div><div className="today-task-list">{urgent.map(taskCard)}{!urgent.length && <p className="today-clear"><Check/>Nothing urgent. You’re clear to focus on the work.</p>}</div></section>
         <section className="panel"><div className="panel-heading"><div><h2>Coming up</h2><p>Open job tasks without an immediate warning.</p></div><strong className="today-count">{later.length}</strong></div><div className="today-task-list">{later.map(taskCard)}{!later.length && <p className="muted">No additional tasks queued.</p>}</div></section>
-        {((selections ?? []).length > 0 || (milestones ?? []).length > 0) && <section className="panel"><div className="panel-heading"><div><h2>Automatic second set of eyes</h2><p>Buildr found dated commitments in estimates and projects.</p></div><AlertTriangle/></div><div className="today-watch-list">
+        {((selections ?? []).length > 0 || (milestones ?? []).length > 0 || (punchItems ?? []).length > 0) && <section className="panel"><div className="panel-heading"><div><h2>Automatic second set of eyes</h2><p>Buildr found dated commitments in estimates and projects.</p></div><AlertTriangle/></div><div className="today-watch-list">
+          {(punchItems ?? []).map((item: any) => <article key={item.id}><ClipboardCheck/><div><strong>{item.description}</strong><span>Punch list{item.room_location ? ` · ${item.room_location}` : ""} · {item.responsible_party}{item.due_date ? ` · Due ${new Date(`${item.due_date}T12:00:00`).toLocaleDateString()}` : ""}</span></div><Link href={`/projects/${item.project_id}#closeout`}>Open</Link></article>)}
           {(selections ?? []).map((item: any) => <article key={item.id}><CalendarDays/><div><strong>{item.description}</strong><span>{String(item.selection_status).replaceAll("_", " ")} · {item.selection_responsibility === "customer" ? "Customer decision" : "Ironwood decision"} · Due {new Date(`${item.selection_deadline}T12:00:00`).toLocaleDateString()}</span></div>{item.estimates?.projects?.id && <Link href={`/projects/${item.estimates.projects.id}`}>Open</Link>}</article>)}
           {(milestones ?? []).map((milestone: any) => { const total = Number(milestone.estimates?.total ?? 0); const amount = milestone.amount_type === "percentage" ? total * Number(milestone.amount_value) / 100 : Number(milestone.amount_value); return <article key={milestone.id}><CalendarDays/><div><strong>{milestone.title} · {money(amount)}</strong><span>{milestone.due_trigger || "Payment milestone"} · Due {new Date(`${milestone.due_date}T12:00:00`).toLocaleDateString()}</span></div>{milestone.estimates?.projects?.id && <Link href={`/projects/${milestone.estimates.projects.id}`}>Open</Link>}</article>; })}
         </div></section>}
