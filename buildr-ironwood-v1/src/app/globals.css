@@ -532,3 +532,25 @@
   font-size: 0.88rem;
   line-height: 1.55;
 }
+
+
+.quick-customer-form {
+  margin-top: 12px;
+  padding: 18px;
+  border: 1px solid rgba(193, 154, 64, 0.35);
+  border-radius: 14px;
+  background: rgba(193, 154, 64, 0.06);
+}
+
+.quick-customer-form .panel-heading {
+  margin-bottom: 14px;
+}
+
+.quick-customer-form h3,
+.quick-customer-form p {
+  margin-top: 0;
+}
+
+.quick-customer-form .button {
+  margin-top: 14px;
+}
