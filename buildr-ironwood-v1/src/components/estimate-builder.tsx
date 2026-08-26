@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
+  Copy,
   FolderPlus,
   Plus,
   Save,
   Trash2,
+  AlertTriangle,
 } from "lucide-react";
 
 import { estimateTotals, money } from "@/lib/money";
@@ -223,6 +226,20 @@ export function EstimateBuilder({
     [allItems, taxRate],
   );
 
+  const readiness = useMemo(() => {
+    const completedItems = allItems.filter((item) => item.description.trim());
+    const warnings: string[] = [];
+    if (!customerId) warnings.push("Choose a customer");
+    if (!title.trim()) warnings.push("Add a project title");
+    if (!address.trim()) warnings.push("Confirm the jobsite address");
+    if (!scope.trim()) warnings.push("Write the detailed scope of work");
+    if (!exclusions.trim()) warnings.push("Confirm exclusions and owner-supplied items");
+    if (!schedule.trim()) warnings.push("Add the payment schedule");
+    if (!completedItems.length) warnings.push("Add at least one priced line item");
+    if (completedItems.some((item) => Number(item.unit_cost) === 0)) warnings.push("Review line items with a $0 cost");
+    return warnings;
+  }, [address, allItems, customerId, exclusions, schedule, scope, title]);
+
   function patchSection(
     sectionId: string,
     values: Partial<Pick<EstimateSectionDraft, "title" | "description">>,
@@ -239,6 +256,23 @@ export function EstimateBuilder({
       ...current,
       blankSection(`Section ${current.length + 1}`, markupRate),
     ]);
+  }
+
+  function duplicateSection(sectionId: string) {
+    setSections((current) => {
+      const index = current.findIndex((section) => section.clientId === sectionId);
+      if (index < 0) return current;
+      const source = current[index];
+      const copy = {
+        ...source,
+        clientId: makeId(),
+        title: source.title + " copy",
+        items: source.items.map((item) => ({ ...item })),
+      };
+      const next = [...current];
+      next.splice(index + 1, 0, copy);
+      return next;
+    });
   }
 
   function removeSection(sectionId: string) {
@@ -287,6 +321,17 @@ export function EstimateBuilder({
             }
           : section,
       ),
+    );
+  }
+
+  function duplicateItem(sectionId: string, itemIndex: number) {
+    setSections((current) =>
+      current.map((section) => {
+        if (section.clientId !== sectionId) return section;
+        const nextItems = [...section.items];
+        nextItems.splice(itemIndex + 1, 0, { ...section.items[itemIndex] });
+        return { ...section, items: nextItems };
+      }),
     );
   }
 
@@ -645,6 +690,15 @@ export function EstimateBuilder({
 
                   <button
                     type="button"
+                    className="icon-button"
+                    aria-label="Duplicate section"
+                    onClick={() => duplicateSection(section.clientId)}
+                  >
+                    <Copy size={17} />
+                  </button>
+
+                  <button
+                    type="button"
                     className="icon-button danger"
                     aria-label="Remove section"
                     disabled={sections.length === 1}
@@ -688,6 +742,15 @@ export function EstimateBuilder({
                           }
                           placeholder="Customer-facing description"
                         />
+
+                        <button
+                          type="button"
+                          className="icon-button"
+                          aria-label="Duplicate line item"
+                          onClick={() => duplicateItem(section.clientId, itemIndex)}
+                        >
+                          <Copy size={17} />
+                        </button>
 
                         <button
                           type="button"
@@ -798,42 +861,44 @@ export function EstimateBuilder({
                           Taxable
                         </label>
 
-                        <label>
-                          Vendor
-                          <input
-                            value={item.vendor}
-                            onChange={(event) =>
-                              patchItem(section.clientId, itemIndex, {
-                                vendor: event.target.value,
-                              })
-                            }
-                            placeholder="Lowe's"
-                          />
-                        </label>
-
-                        <label>
-                          SKU / item #
-                          <input
-                            value={item.vendor_sku}
-                            onChange={(event) =>
-                              patchItem(section.clientId, itemIndex, {
-                                vendor_sku: event.target.value,
-                              })
-                            }
-                          />
-                        </label>
-
-                        <label className="span-2">
-                          Vendor URL
-                          <input
-                            value={item.vendor_url}
-                            onChange={(event) =>
-                              patchItem(section.clientId, itemIndex, {
-                                vendor_url: event.target.value,
-                              })
-                            }
-                          />
-                        </label>
+                        {item.item_type !== "labor" && (
+                          <>
+                            <label>
+                              Vendor
+                              <input
+                                value={item.vendor}
+                                onChange={(event) =>
+                                  patchItem(section.clientId, itemIndex, {
+                                    vendor: event.target.value,
+                                  })
+                                }
+                                placeholder={item.item_type === "subcontractor" ? "Subcontractor name" : "Lowe's"}
+                              />
+                            </label>
+                            <label>
+                              SKU / item #
+                              <input
+                                value={item.vendor_sku}
+                                onChange={(event) =>
+                                  patchItem(section.clientId, itemIndex, {
+                                    vendor_sku: event.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className="span-2">
+                              Vendor URL
+                              <input
+                                value={item.vendor_url}
+                                onChange={(event) =>
+                                  patchItem(section.clientId, itemIndex, {
+                                    vendor_url: event.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                          </>
+                        )}
 
                         <label className="span-2">
                           Private line note
@@ -928,6 +993,19 @@ export function EstimateBuilder({
 
       <aside className="builder-summary panel">
         <h2>{isEditing ? "Updated total" : "Estimate total"}</h2>
+
+        <div className={readiness.length ? "estimate-readiness estimate-readiness--warning" : "estimate-readiness estimate-readiness--ready"}>
+          <div className="estimate-readiness__heading">
+            {readiness.length ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+            <strong>{readiness.length ? readiness.length + " items to review" : "Ready for final review"}</strong>
+          </div>
+          {readiness.length > 0 && (
+            <ul>
+              {readiness.slice(0, 5).map((warning) => <li key={warning}>{warning}</li>)}
+              {readiness.length > 5 && <li>Plus {readiness.length - 5} more</li>}
+            </ul>
+          )}
+        </div>
 
         <label>
           Default markup %
