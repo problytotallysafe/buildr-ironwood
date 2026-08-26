@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { UserPlus, X } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 type CustomerOption = {
   id: string;
@@ -27,7 +29,12 @@ export function SmartEstimateSetup({
   selectedCustomer?: string;
 }) {
   const router = useRouter();
+  const supabase = createClient();
 
+  const [customerOptions, setCustomerOptions] = useState(customers);
+  const [addingCustomer, setAddingCustomer] = useState(false);
+  const [customerBusy, setCustomerBusy] = useState(false);
+  const [customerError, setCustomerError] = useState("");
   const [customerId, setCustomerId] = useState(selectedCustomer ?? "");
   const [projectType, setProjectType] = useState<ProjectType>("bathroom");
   const [projectSize, setProjectSize] = useState("standard");
@@ -55,6 +62,49 @@ export function SmartEstimateSetup({
         return "Buildr will start with a flexible general structure that you can customize.";
     }
   }, [projectType]);
+
+  async function createCustomer(formData: FormData) {
+    setCustomerError("");
+    setCustomerBusy(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setCustomerError("Your session expired. Sign in again.");
+        return;
+      }
+      const value = (name: string) => String(formData.get(name) ?? "").trim() || null;
+      const firstName = value("first_name");
+      const lastName = value("last_name");
+      if (!firstName || !lastName) {
+        setCustomerError("Enter the customer's first and last name.");
+        return;
+      }
+      const { data, error } = await supabase.from("customers").insert({
+        owner_id: user.id,
+        first_name: firstName,
+        last_name: lastName,
+        email: value("email"),
+        phone: value("phone"),
+        address_line1: value("address_line1"),
+        city: value("city"),
+        state: value("state") || "AR",
+        postal_code: value("postal_code"),
+      }).select("id,first_name,last_name,company_name").single();
+
+      if (error || !data) {
+        setCustomerError(error?.message || "Could not save the customer.");
+        return;
+      }
+
+      setCustomerOptions((current) => [...current, data].sort((a, b) =>
+        (a.last_name || "").localeCompare(b.last_name || "")
+      ));
+      setCustomerId(data.id);
+      setAddingCustomer(false);
+    } finally {
+      setCustomerBusy(false);
+    }
+  }
 
   function continueToEstimate() {
     if (!customerId) return;
@@ -98,7 +148,7 @@ export function SmartEstimateSetup({
             onChange={(event) => setCustomerId(event.target.value)}
           >
             <option value="">Choose a customer…</option>
-            {customers.map((customer) => (
+            {customerOptions.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.first_name} {customer.last_name}
                 {customer.company_name ? ` — ${customer.company_name}` : ""}
@@ -106,6 +156,35 @@ export function SmartEstimateSetup({
             ))}
           </select>
         </label>
+
+        <div className="span-2">
+          {!addingCustomer ? (
+            <button type="button" className="button button--outline" onClick={() => setAddingCustomer(true)}>
+              <UserPlus size={16} /> Add new customer
+            </button>
+          ) : (
+            <form action={createCustomer} className="quick-customer-form">
+              <div className="panel-heading">
+                <div><h3>New customer</h3><p>Save the essentials now. You can add more details later.</p></div>
+                <button type="button" className="icon-button" aria-label="Close new customer form" onClick={() => setAddingCustomer(false)}><X size={17} /></button>
+              </div>
+              <div className="form-grid">
+                <label>First name<input name="first_name" required /></label>
+                <label>Last name<input name="last_name" required /></label>
+                <label>Email<input name="email" type="email" /></label>
+                <label>Phone<input name="phone" /></label>
+                <label className="span-2">Street address<input name="address_line1" /></label>
+                <label>City<input name="city" /></label>
+                <label>State<input name="state" defaultValue="AR" /></label>
+                <label>ZIP code<input name="postal_code" /></label>
+              </div>
+              {customerError && <p className="error-box">{customerError}</p>}
+              <button className="button button--gold" disabled={customerBusy}>
+                {customerBusy ? "Saving customer…" : "Save and use customer"}
+              </button>
+            </form>
+          )}
+        </div>
 
         <div className="span-2 smart-setup-group">
           <span className="smart-setup-label">What kind of project is this?</span>
