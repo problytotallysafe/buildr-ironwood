@@ -10,8 +10,10 @@ create table if not exists public.site_visit_media (
   created_at timestamptz not null default now()
 );
 alter table public.site_visit_media enable row level security;
+create trigger site_visit_media_assign_owner before insert on public.site_visit_media
+  for each row execute function private.assign_workspace_owner();
 create policy site_visit_media_owner_all on public.site_visit_media for all to authenticated
-  using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
+  using (private.can_field_write_business(owner_id)) with check (private.can_field_write_business(owner_id));
 create index site_visit_media_worksheet_idx on public.site_visit_media (worksheet_id, created_at);
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -40,7 +42,7 @@ create table if not exists public.leads (
 );
 alter table public.leads enable row level security;
 create policy leads_owner_all on public.leads for all to authenticated
-  using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
+  using (private.can_manage_business(owner_id)) with check (private.can_manage_business(owner_id));
 create index leads_owner_status_idx on public.leads (owner_id, status, created_at desc);
 
 create table if not exists public.notifications (
@@ -55,24 +57,7 @@ create table if not exists public.notifications (
 );
 alter table public.notifications enable row level security;
 create policy notifications_owner_all on public.notifications for all to authenticated
-  using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
+  using (private.can_access_business(owner_id)) with check (private.can_manage_business(owner_id));
 create index notifications_owner_unread_idx on public.notifications (owner_id, created_at desc) where read_at is null;
 
-create table if not exists public.team_access (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  owner_id uuid not null references auth.users(id) on delete cascade,
-  email text not null,
-  display_name text,
-  role text not null default 'employee' check (role in ('owner','manager','employee','demo')),
-  permissions jsonb not null default '{"customers":true,"estimates":true,"projects":true,"payments":false,"settings":false}'::jsonb,
-  active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-alter table public.team_access enable row level security;
-create policy team_access_owner_select on public.team_access for select to authenticated
-  using ((select auth.uid()) = owner_id or (select auth.uid()) = user_id);
-create policy team_access_owner_write on public.team_access for all to authenticated
-  using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
-
-grant select, insert, update, delete on public.site_visit_media, public.leads, public.notifications, public.team_access to authenticated;
+grant select, insert, update, delete on public.site_visit_media, public.leads, public.notifications to authenticated;
