@@ -554,3 +554,55 @@
 .quick-customer-form .button {
   margin-top: 14px;
 }
+
+
+.draft-recovery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-color: rgba(193, 154, 64, 0.55);
+  background: rgba(193, 154, 64, 0.1);
+}
+
+.draft-recovery__copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.draft-recovery__copy p {
+  margin: 4px 0 0;
+}
+
+.draft-save-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 14px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.draft-save-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2f7d5b;
+}
+
+.draft-save-dot--saving {
+  background: #c19a40;
+  animation: draft-save-pulse 1s ease-in-out infinite;
+}
+
+@keyframes draft-save-pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (max-width: 720px) {
+  .draft-recovery {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
