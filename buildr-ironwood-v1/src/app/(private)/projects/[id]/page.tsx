@@ -41,7 +41,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const estimate = project.estimates as any;
   const estimateId = estimate?.id ?? null;
 
-  const [{ data: mediaRows }, { data: laborItems }, { data: selectionItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }] = await Promise.all([
+  const [{ data: mediaRows }, { data: laborItems }, { data: selectionItems }, { data: paymentMilestones }, { data: timeEntries }, { data: changeOrders }, { data: payments }] = await Promise.all([
     supabase
       .from("project_media")
       .select("id,storage_path,file_name,category,room_location,caption,customer_visible,created_at")
@@ -53,6 +53,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           .select("id,description,category,quantity,unit,unit_cost,markup_rate")
           .eq("estimate_id", estimateId)
           .eq("item_type", "labor")
+          .order("sort_order")
+      : Promise.resolve({ data: [] } as any),
+    estimateId
+      ? supabase
+          .from("estimate_payment_milestones")
+          .select("*")
+          .eq("estimate_id", estimateId)
           .order("sort_order")
       : Promise.resolve({ data: [] } as any),
     estimateId
@@ -75,7 +82,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .order("created_at", { ascending: false }),
     supabase
       .from("payments")
-      .select("id,amount,payment_method,reference_number,notes,received_at")
+      .select("id,amount,payment_method,reference_number,notes,received_at,milestone_id")
       .eq("project_id", id)
       .order("received_at", { ascending: false }),
   ]);
@@ -145,6 +152,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
       <section id="payments" className="panel project-payments-panel project-section-anchor">
         <div className="panel-heading"><div><span className="project-overview-label">Payments</span><h2>{money(amountPaid)} received · {money(remaining)} remaining</h2><p>Every payment recorded for this project is shown below.</p></div><Link href={`/payments?project=${project.id}`} className="button button--gold"><CreditCard size={16}/>Open payment log</Link></div>
+        {(paymentMilestones ?? []).length > 0 && <div className="payment-milestone-summary">{paymentMilestones?.map((milestone: any) => { const expected = milestone.amount_type === "percentage" ? contractTotal * Number(milestone.amount_value) / 100 : Number(milestone.amount_value); const received = (payments ?? []).filter((payment: any) => payment.milestone_id === milestone.id).reduce((sum: number, payment: any) => sum + Number(payment.amount), 0); return <article key={milestone.id}><div><strong>{milestone.title}</strong><b>{money(received)} / {money(expected)}</b></div><small>{received >= expected ? "Paid" : milestone.due_trigger || "Upcoming"}{milestone.due_date ? ` · Due ${new Date(`${milestone.due_date}T12:00:00`).toLocaleDateString()}` : ""}</small></article>; })}</div>}
         <div className="table-wrap"><table><thead><tr><th>Date</th><th>Method</th><th>Reference</th><th>Notes</th><th>Amount</th></tr></thead><tbody>{(payments ?? []).map((payment: any) => <tr key={payment.id}><td>{new Date(payment.received_at).toLocaleDateString()}</td><td className="capitalize">{payment.payment_method}</td><td>{payment.reference_number || "—"}</td><td>{payment.notes || "—"}</td><td><strong>{money(Number(payment.amount))}</strong></td></tr>)}{!payments?.length && <tr><td colSpan={5} className="empty-cell">No payments have been recorded for this project yet.</td></tr>}</tbody></table></div>
       </section>
 

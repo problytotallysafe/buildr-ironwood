@@ -135,6 +135,38 @@
 .selection-card-list article b { color: var(--green); }
 .selection-card-list article small { color: var(--muted); }
 
+.payment-milestones-editor {
+  padding: 16px;
+  border: 1px solid rgba(197, 154, 82, .38);
+  border-radius: 14px;
+  background: rgba(245, 240, 230, .65);
+}
+.payment-milestone-list, .payment-milestone-summary { display: grid; gap: 10px; margin: 12px 0; }
+.payment-milestone-list article {
+  display: grid;
+  grid-template-columns: 1.2fr .65fr .55fr 1.5fr .8fr auto;
+  align-items: end;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.payment-milestone-total { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+.payment-milestone-total span { color: var(--muted); font-size: .7rem; font-weight: 800; text-transform: uppercase; }
+.payment-milestone-summary article { padding: 13px 0; border-bottom: 1px solid var(--line); }
+.payment-milestone-summary article:last-child { border-bottom: 0; }
+.payment-milestone-summary article > div { display: flex; justify-content: space-between; gap: 14px; }
+.payment-milestone-summary article b { color: var(--green); }
+.payment-milestone-summary article small { display: block; color: var(--muted); margin-top: 3px; }
+
+@media (max-width: 1100px) {
+  .payment-milestone-list article { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 700px) {
+  .payment-milestone-list article { grid-template-columns: 1fr; }
+}
+
 .project-table-link {
   color: inherit;
   font-weight: 800;
