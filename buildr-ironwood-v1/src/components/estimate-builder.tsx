@@ -1047,12 +1047,14 @@ export function EstimateBuilder({
                               Status
                               <select
                                 value={item.selection_status}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const status = event.target.value as EstimateItemDraft["selection_status"];
                                   patchItem(section.clientId, itemIndex, {
-                                    selection_status: event.target.value as EstimateItemDraft["selection_status"],
-                                    item_type: event.target.value === "allowance" ? "allowance" : item.item_type,
-                                  })
-                                }
+                                    selection_status: status,
+                                    item_type: status === "allowance" ? "allowance" : item.item_type,
+                                    selection_responsibility: status === "customer_supplied" ? "customer" : item.selection_responsibility,
+                                  });
+                                }}
                               >
                                 <option value="final">Final selection</option>
                                 <option value="allowance">Allowance</option>

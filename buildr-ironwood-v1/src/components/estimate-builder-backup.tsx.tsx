@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { estimateTotals, money } from "@/lib/money";
 import type { EstimateItemDraft } from "@/lib/types";
 
-const blankItem = (markup = 20): EstimateItemDraft => ({ item_type:"material", category:"", description:"", quantity:1, unit:"each", unit_cost:0, markup_rate:markup, taxable:true, vendor:"", vendor_sku:"", vendor_url:"", private_notes:"" });
+const blankItem = (markup = 20): EstimateItemDraft => ({ item_type:"material", category:"", description:"", quantity:1, unit:"each", unit_cost:0, markup_rate:markup, taxable:true, vendor:"", vendor_sku:"", vendor_url:"", private_notes:"", selection_status:"final", selection_responsibility:"ironwood", selection_deadline:"", selected_product:"", selection_notes:"" });
 
 export function EstimateBuilder({ customers, defaults, selectedCustomer }: { customers:any[]; defaults:{ tax_rate:number; markup_rate:number }; selectedCustomer?:string }) {
   const router = useRouter(); const supabase = createClient();
