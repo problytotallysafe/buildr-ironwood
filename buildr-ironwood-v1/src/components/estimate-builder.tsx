@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronDown,
@@ -12,6 +12,8 @@ import {
   Save,
   Trash2,
   AlertTriangle,
+  RotateCcw,
+  X,
 } from "lucide-react";
 
 import { estimateTotals, money } from "@/lib/money";
@@ -79,6 +81,22 @@ type EstimatePreset = {
     title: string;
     description?: string;
   }>;
+};
+
+type EstimateDraft = {
+  customerId: string;
+  title: string;
+  address: string;
+  scope: string;
+  exclusions: string;
+  notes: string;
+  privateNotes: string;
+  revisionReason: string;
+  schedule: string;
+  taxRate: number;
+  markupRate: number;
+  sections: EstimateSectionDraft[];
+  savedAt: string;
 };
 
 type EstimateBuilderProps = {
@@ -215,6 +233,12 @@ export function EstimateBuilder({
           }))
         : loadSections(initialEstimate, startingMarkup),
   );
+  const [draftReady, setDraftReady] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<EstimateDraft | null>(null);
+  const [draftStatus, setDraftStatus] = useState<"waiting" | "saving" | "saved">("waiting");
+  const [lastDraftSaved, setLastDraftSaved] = useState<string | null>(null);
+
+  const draftKey = "buildr:estimate-draft:" + (initialEstimate?.id ?? [selectedCustomer ?? "new", preset?.title ?? "custom"].join(":"));
 
   const allItems = useMemo(
     () => sections.flatMap((section) => section.items),
@@ -225,6 +249,79 @@ export function EstimateBuilder({
     () => estimateTotals(allItems, taxRate),
     [allItems, taxRate],
   );
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved) as EstimateDraft;
+        if (draft?.savedAt && Array.isArray(draft.sections)) {
+          setPendingDraft(draft);
+          setLastDraftSaved(draft.savedAt);
+          return;
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(draftKey);
+    }
+    setDraftReady(true);
+    setDraftStatus("saved");
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    setDraftStatus("saving");
+    const timer = window.setTimeout(() => {
+      const savedAt = new Date().toISOString();
+      const draft: EstimateDraft = {
+        customerId, title, address, scope, exclusions, notes, privateNotes,
+        revisionReason, schedule, taxRate, markupRate, sections, savedAt,
+      };
+      window.localStorage.setItem(draftKey, JSON.stringify(draft));
+      setLastDraftSaved(savedAt);
+      setDraftStatus("saved");
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [
+    address, customerId, draftKey, draftReady, exclusions, markupRate, notes,
+    privateNotes, revisionReason, schedule, scope, sections, taxRate, title,
+  ]);
+
+  useEffect(() => {
+    function warnBeforeLeaving(event: BeforeUnloadEvent) {
+      if (draftStatus !== "saving") return;
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [draftStatus]);
+
+  function restoreDraft() {
+    if (!pendingDraft) return;
+    setCustomerId(pendingDraft.customerId);
+    setTitle(pendingDraft.title);
+    setAddress(pendingDraft.address);
+    setScope(pendingDraft.scope);
+    setExclusions(pendingDraft.exclusions);
+    setNotes(pendingDraft.notes);
+    setPrivateNotes(pendingDraft.privateNotes);
+    setRevisionReason(pendingDraft.revisionReason);
+    setSchedule(pendingDraft.schedule);
+    setTaxRate(Number(pendingDraft.taxRate));
+    setMarkupRate(Number(pendingDraft.markupRate));
+    setSections(pendingDraft.sections);
+    setPendingDraft(null);
+    setDraftReady(true);
+    setDraftStatus("saved");
+  }
+
+  function discardDraft() {
+    window.localStorage.removeItem(draftKey);
+    setPendingDraft(null);
+    setLastDraftSaved(null);
+    setDraftReady(true);
+    setDraftStatus("saved");
+  }
 
   const readiness = useMemo(() => {
     const completedItems = allItems.filter((item) => item.description.trim());
@@ -554,6 +651,7 @@ export function EstimateBuilder({
         return;
       }
 
+      window.localStorage.removeItem(draftKey);
       router.push(`/estimates/${estimateId}`);
       router.refresh();
     } finally {
@@ -564,6 +662,22 @@ export function EstimateBuilder({
   return (
     <div className="builder-layout">
       <div className="builder-main">
+        {pendingDraft && (
+          <section className="panel draft-recovery">
+            <div className="draft-recovery__copy">
+              <RotateCcw size={20} />
+              <div>
+                <strong>Unsaved estimate work found</strong>
+                <p>Buildr saved changes on this device {new Date(pendingDraft.savedAt).toLocaleString()}.</p>
+              </div>
+            </div>
+            <div className="button-row">
+              <button type="button" className="button button--gold" onClick={restoreDraft}>Restore draft</button>
+              <button type="button" className="button button--outline" onClick={discardDraft}><X size={15} />Discard</button>
+            </div>
+          </section>
+        )}
+
         <section className="panel form-grid">
           {isEditing && initialEstimate?.status !== "draft" && (
             <div className="span-2 revision-warning">
@@ -993,6 +1107,15 @@ export function EstimateBuilder({
 
       <aside className="builder-summary panel">
         <h2>{isEditing ? "Updated total" : "Estimate total"}</h2>
+
+        <div className="draft-save-status" aria-live="polite">
+          <span className={draftStatus === "saving" ? "draft-save-dot draft-save-dot--saving" : "draft-save-dot"} />
+          {draftStatus === "saving"
+            ? "Saving draft…"
+            : lastDraftSaved
+              ? "Draft saved " + new Date(lastDraftSaved).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+              : "Draft protection ready"}
+        </div>
 
         <div className={readiness.length ? "estimate-readiness estimate-readiness--warning" : "estimate-readiness estimate-readiness--ready"}>
           <div className="estimate-readiness__heading">
