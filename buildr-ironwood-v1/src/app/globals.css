@@ -167,6 +167,40 @@
   .payment-milestone-list article { grid-template-columns: 1fr; }
 }
 
+.today-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .65fr); gap: 22px; align-items: start; }
+.today-clock { display: flex; align-items: center; gap: 15px; margin-bottom: 22px; border-color: var(--gold); background: #fffaf0; }
+.today-clock > svg { color: var(--gold); }
+.today-clock > div { display: grid; flex: 1; }
+.today-clock span, .today-clock small { color: var(--muted); }
+.today-count { display: grid; place-items: center; min-width: 38px; height: 38px; border-radius: 50%; background: var(--cream); color: var(--green); }
+.today-task-list, .today-watch-list { display: grid; gap: 10px; }
+.today-task { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 14px; border: 1px solid var(--line); border-left: 4px solid #aab2ad; border-radius: 12px; }
+.today-task--high { border-left-color: var(--gold); }
+.today-task--urgent { border-left-color: var(--danger); background: #fffafa; }
+.today-task > div { display: grid; }
+.today-task span { color: var(--muted); font-size: .78rem; }
+.today-task p { margin: 5px 0 0; font-size: .88rem; }
+.today-task > a, .today-watch-list a { color: var(--green); font-weight: 800; font-size: .82rem; }
+.today-check { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--green); background: #fff; }
+.today-check:hover { background: #e4f2e9; border-color: #bddbc8; }
+.today-clear { display: flex; align-items: center; gap: 10px; color: #24643e; padding: 18px; border-radius: 12px; background: #e4f2e9; }
+.today-watch-list article { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.today-watch-list article:last-child { border-bottom: 0; }
+.today-watch-list svg { color: var(--gold); }
+.today-watch-list article > div { display: grid; }
+.today-watch-list span { color: var(--muted); font-size: .78rem; }
+.today-completed summary { cursor: pointer; font-family: Georgia, serif; font-size: 1.15rem; font-weight: 800; color: var(--green); }
+.today-completed > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 12px; }
+
+@media (max-width: 900px) {
+  .today-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .today-task { grid-template-columns: auto 1fr auto; }
+  .today-task > a { grid-column: 2; }
+  .today-clock { align-items: flex-start; flex-wrap: wrap; }
+}
+
 .project-table-link {
   color: inherit;
   font-weight: 800;
