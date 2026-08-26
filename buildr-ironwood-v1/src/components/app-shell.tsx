@@ -7,6 +7,7 @@ import {
   BookOpen,
   BriefcaseBusiness,
   CalendarCheck2,
+  ClipboardList,
   Clock3,
   CreditCard,
   FileText,
@@ -27,6 +28,7 @@ import { IronwoodLogo } from "./ironwood-logo";
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/today", label: "Project Today", icon: CalendarCheck2 },
+  { href: "/site-visits", label: "Site Visits", icon: ClipboardList },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/estimates", label: "Estimates", icon: FileText },
   { href: "/independence", label: "Independence", icon: ShieldCheck },
