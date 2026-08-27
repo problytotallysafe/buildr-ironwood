@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { ArrowLeft, ChevronRight, Clock3, CreditCard, FileText, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, ChevronRight, Clock3, CreditCard, FileText, Pencil, Plus, ReceiptText } from "lucide-react";
 
 import { LaborVsActual } from "@/components/labor-vs-actual";
 import { PageHeader } from "@/components/page-header";
@@ -134,6 +134,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </Link>
         <Link href={`/projects/${project.id}/change-orders/new`} className="button button--outline">
           <Plus size={17}/>Add Change Order
+        </Link>
+        <Link href={`/projects/${project.id}/invoice`} className="button button--outline">
+          <ReceiptText size={17}/>Final Invoice
         </Link>
       </div>
 

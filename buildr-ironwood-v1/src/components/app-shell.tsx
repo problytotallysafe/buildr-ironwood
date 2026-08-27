@@ -13,7 +13,6 @@ import {
   FileText,
   LineChart,
   Inbox,
-  ShieldCheck,
   LogOut,
   Menu,
   Bell,
@@ -31,18 +30,16 @@ const nav = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/today", label: "Project Today", icon: CalendarCheck2 },
-  { href: "/site-visits", label: "Site Visits", icon: ClipboardList },
+  { href: "/intake", label: "New Client Intake", icon: ClipboardList },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/leads", label: "Leads", icon: Inbox },
   { href: "/estimates", label: "Estimates", icon: FileText },
-  { href: "/independence", label: "Independence", icon: ShieldCheck },
   { href: "/projects", label: "Projects", icon: BriefcaseBusiness },
   { href: "/time", label: "Time Tracker", icon: Clock3 },
   { href: "/payments", label: "Payments", icon: CreditCard },
   { href: "/analytics", label: "Analytics", icon: LineChart },
   { href: "/catalog", label: "Price Book", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/settings/team", label: "Team & Logins", icon: Users },
 ];
 
 type ActiveTime = {
