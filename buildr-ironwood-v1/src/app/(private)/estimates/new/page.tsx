@@ -14,9 +14,10 @@ type SearchParams = {
   materialSelected?: string;
   largeScope?: string;
   assessment?: string;
+  siteVisit?: string;
 };
 
-function buildPreset(query: SearchParams, assessment?: any) {
+function buildPreset(query: SearchParams, assessment?: any, siteVisit?: any) {
   const projectType = query.projectType ?? "other";
   const size = query.projectSize ?? "standard";
 
@@ -209,8 +210,15 @@ function buildPreset(query: SearchParams, assessment?: any) {
   }
 
   return {
-    title: "Custom Project",
+    title: siteVisit?.project_type ? `${siteVisit.project_type} Project` : "Custom Project",
     paymentSchedule: size === "small" ? smallPayment : standardPayment,
+    scopeStarter: siteVisit ? [
+      siteVisit.client_goals ? `Customer goals:\n${siteVisit.client_goals}` : "",
+      siteVisit.measurements ? `Site measurements:\n${siteVisit.measurements}` : "",
+      siteVisit.existing_conditions ? `Existing conditions:\n${siteVisit.existing_conditions}` : "",
+      siteVisit.selections_discussed ? `Selections discussed:\n${siteVisit.selections_discussed}` : "",
+      siteVisit.unanswered_questions ? `Items to verify before final pricing:\n${siteVisit.unanswered_questions}` : "",
+    ].filter(Boolean).join("\n\n") : undefined,
     sections: [
       "Scope of work",
       "Materials",
@@ -247,6 +255,10 @@ export default async function NewEstimatePage({
         .maybeSingle()
     : { data: null };
 
+  const { data: siteVisit } = query.siteVisit
+    ? await supabase.from("site_visit_worksheets").select("*").eq("id", query.siteVisit).maybeSingle()
+    : { data: null };
+
   if (query.setup !== "1") {
     return (
       <div className="page-wrap page-wrap--narrow">
@@ -279,7 +291,7 @@ export default async function NewEstimatePage({
           tax_rate: Number(settings?.default_tax_rate ?? 0),
           markup_rate: Number(settings?.default_markup_rate ?? 20),
         }}
-        preset={buildPreset(query, assessment)}
+        preset={buildPreset(query, assessment, siteVisit)}
       />
     </div>
   );
