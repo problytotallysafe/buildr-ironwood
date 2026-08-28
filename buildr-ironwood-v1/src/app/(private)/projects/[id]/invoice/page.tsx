@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { IronwoodLogo } from "@/components/ironwood-logo";
 import { PrintInvoiceButton } from "@/components/print-invoice-button";
+import { InvoiceSendControls } from "@/components/invoice-send-controls";
 import { money } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,7 +27,7 @@ export default async function FinalInvoicePage({ params }: { params: Promise<{ i
   const customerAddress = [customer?.address_line1, customer?.address_line2, customer?.city, customer?.state, customer?.postal_code].filter(Boolean).join(", ");
 
   return <div className="invoice-screen">
-    <div className="invoice-toolbar no-print"><Link href={`/projects/${id}`}><ArrowLeft size={16}/>Back to project</Link><PrintInvoiceButton/></div>
+    <div className="invoice-toolbar no-print"><Link href={`/projects/${id}`}><ArrowLeft size={16}/>Back to project</Link><div className="invoice-toolbar-actions"><InvoiceSendControls projectId={id} enabled={project.status === "complete"}/><PrintInvoiceButton/></div></div>
     <article className="invoice-sheet">
       <header className="invoice-header"><div><IronwoodLogo/><p>{settings?.address}</p><p>{[settings?.phone, settings?.email].filter(Boolean).join(" · ")}</p></div><div><span>FINAL INVOICE</span><h1>{estimate?.estimate_number || "Project invoice"}</h1><p>{new Date().toLocaleDateString()}</p></div></header>
       <section className="invoice-parties"><div><span>Bill to</span><strong>{customer?.first_name} {customer?.last_name}</strong><p>{customerAddress}</p><p>{[customer?.phone, customer?.email].filter(Boolean).join(" · ")}</p></div><div><span>Project</span><strong>{estimate?.title || project.name}</strong><p>{estimate?.project_address || project.project_address}</p></div></section>

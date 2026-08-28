@@ -136,7 +136,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <Plus size={17}/>Add Change Order
         </Link>
         <Link href={`/projects/${project.id}/invoice`} className="button button--outline">
-          <ReceiptText size={17}/>Final Invoice
+          <ReceiptText size={17}/>{project.status === "complete" ? "Send Final Invoice" : "Final Invoice"}
         </Link>
       </div>
 
