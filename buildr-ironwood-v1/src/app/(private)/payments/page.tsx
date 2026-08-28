@@ -31,10 +31,12 @@ async function savePayment(formData: FormData) {
   if (priorProject && priorProject !== projectId) await supabase.rpc("refresh_project_paid_total", { p_project_id: priorProject });
   revalidatePath("/payments");
   revalidatePath("/projects");
+  revalidatePath("/today");
+  revalidatePath("/dashboard");
   revalidatePath(`/projects/${projectId}`);
 }
 
-export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ edit?: string; project?: string }> }) {
+export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ edit?: string; project?: string; milestone?: string; amount?: string }> }) {
   const query = await searchParams;
   const supabase = await createClient();
   let paymentQuery = supabase.from("payments").select("*,projects(name,customers(first_name,last_name)),estimate_payment_milestones(title)").order("received_at", { ascending: false });
@@ -49,6 +51,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
     ? await supabase.from("estimate_payment_milestones").select("id,estimate_id,title,amount_type,amount_value,sort_order").in("estimate_id", estimateIds).order("sort_order")
     : { data: [] };
   const selectedProject = (projects ?? []).find((project: any) => project.id === query.project);
+  const suggestedAmount = Number(query.amount);
+  const amountDefault = !editing && Number.isFinite(suggestedAmount) && suggestedAmount > 0 ? suggestedAmount.toFixed(2) : "";
 
   return <div className="page-wrap">
     <PageHeader eyebrow="Money received" title={selectedProject ? `${selectedProject.name} payments` : "Payments"} description={selectedProject ? "Showing this project’s payment history. Record the next deposit, draw, or final payment here." : "Record deposits, progress draws, and final payments; reopen any entry to correct it later."}/>
@@ -61,8 +65,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       <aside className="panel"><h2>{editing ? "Edit payment" : "Record payment"}</h2><form action={savePayment} className="stack">
         <input type="hidden" name="id" value={editing?.id ?? ""}/>
         <label>Project<select name="project_id" required defaultValue={editing?.project_id ?? query.project ?? ""}><option value="">Choose project…</option>{(projects ?? []).map((project: any) => <option key={project.id} value={project.id}>{project.name} — {project.customers?.first_name} {project.customers?.last_name}</option>)}</select></label>
-        <label>Payment milestone<select name="milestone_id" defaultValue={editing?.milestone_id ?? ""}><option value="">Unassigned / other payment</option>{(milestones ?? []).map((milestone: any) => { const project = (projects ?? []).find((item: any) => item.estimate_id === milestone.estimate_id); return <option key={milestone.id} value={milestone.id}>{project?.name ? `${project.name} — ` : ""}{milestone.title} ({milestone.amount_type === "percentage" ? `${milestone.amount_value}%` : money(milestone.amount_value)})</option>; })}</select><small>Choose the deposit, draw, or final payment this satisfies.</small></label>
-        <label>Amount<input name="amount" type="number" min="0" step="0.01" required defaultValue={editing?.amount ?? ""}/></label>
+        <label>Payment milestone<select name="milestone_id" defaultValue={editing?.milestone_id ?? query.milestone ?? ""}><option value="">Unassigned / other payment</option>{(milestones ?? []).map((milestone: any) => { const project = (projects ?? []).find((item: any) => item.estimate_id === milestone.estimate_id); return <option key={milestone.id} value={milestone.id}>{project?.name ? `${project.name} — ` : ""}{milestone.title} ({milestone.amount_type === "percentage" ? `${milestone.amount_value}%` : money(milestone.amount_value)})</option>; })}</select><small>Choose the deposit, draw, or final payment this satisfies.</small></label>
+        <label>Amount<input name="amount" type="number" min="0" step="0.01" required defaultValue={editing?.amount ?? amountDefault}/></label>
         <label>Date received<input name="received_at" type="date" required defaultValue={editing ? new Date(editing.received_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)}/></label>
         <label>Method<select name="payment_method" defaultValue={editing?.payment_method ?? "other"}><option>check</option><option>cash</option><option>card</option><option>bank transfer</option><option>other</option></select></label>
         <label>Reference / check #<input name="reference_number" defaultValue={editing?.reference_number ?? ""}/></label>

@@ -14,6 +14,26 @@ function refreshToday() {
   revalidatePath("/dashboard");
 }
 
+async function markPaymentSent(formData: FormData) {
+  "use server";
+  const estimateId = String(formData.get("estimate_id") || "");
+  const projectId = String(formData.get("project_id") || "");
+  const milestoneId = String(formData.get("milestone_id") || "");
+  if (!estimateId || !projectId) return;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const { data: estimate } = await supabase.from("estimates").select("id").eq("id", estimateId).maybeSingle();
+  if (!estimate) return;
+  await supabase.from("estimate_events").insert({
+    owner_id: user.id,
+    estimate_id: estimate.id,
+    event_type: "payment_reminder_marked_sent",
+    metadata: { project_id: projectId, milestone_id: milestoneId || null, marked_manually: true },
+  });
+  refreshToday();
+}
+
 async function addTask(formData: FormData) {
   "use server";
   const supabase = await createClient();
@@ -57,17 +77,45 @@ export async function ProjectTodayContent({ embedded = false }: { embedded?: boo
   ]);
 
   const completedIds = (completedProjects ?? []).map((project: any) => project.id);
-  const [{ data: completedChangeOrders }, { data: completedPayments }] = completedIds.length ? await Promise.all([
-    supabase.from("change_orders").select("project_id,total,status").in("project_id", completedIds).eq("status", "accepted"),
-    supabase.from("payments").select("project_id,amount").in("project_id", completedIds),
-  ]) : [{ data: [] }, { data: [] }];
+  const relatedEstimateIds = Array.from(new Set([
+    ...(completedProjects ?? []).flatMap((project: any) => {
+      const estimate = Array.isArray(project.estimates) ? project.estimates[0] : project.estimates;
+      return estimate?.id ? [estimate.id] : [];
+    }),
+    ...(milestones ?? []).map((milestone: any) => milestone.estimate_id).filter(Boolean),
+  ]));
+  const [{ data: completedChangeOrders }, { data: completedPayments }, { data: paymentActivity }] = await Promise.all([
+    completedIds.length
+      ? supabase.from("change_orders").select("project_id,total,status").in("project_id", completedIds).eq("status", "accepted")
+      : Promise.resolve({ data: [] } as any),
+    completedIds.length
+      ? supabase.from("payments").select("project_id,amount").in("project_id", completedIds)
+      : Promise.resolve({ data: [] } as any),
+    relatedEstimateIds.length
+      ? supabase.from("estimate_events").select("estimate_id,event_type,metadata,created_at").in("estimate_id", relatedEstimateIds).in("event_type", ["invoice_sent_email", "invoice_sent_via_text", "payment_reminder_marked_sent"]).order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] } as any),
+  ]);
+
+  function latestSentAt(projectId: string, milestoneId?: string) {
+    const event = (paymentActivity ?? []).find((item: any) => {
+      const metadata = item.metadata ?? {};
+      if (String(metadata.project_id || "") !== projectId) return false;
+      if (milestoneId) return item.event_type === "payment_reminder_marked_sent" && String(metadata.milestone_id || "") === milestoneId;
+      return !metadata.milestone_id;
+    });
+    return event?.created_at ?? null;
+  }
+
+  function sentLabel(value: string) {
+    return new Date(value).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" });
+  }
 
   const overdueInvoices = (completedProjects ?? []).map((project: any) => {
     const estimate = Array.isArray(project.estimates) ? project.estimates[0] : project.estimates;
     const base = Number(estimate?.total ?? project.contract_total ?? 0);
     const changes = (completedChangeOrders ?? []).filter((item: any) => item.project_id === project.id).reduce((sum: number, item: any) => sum + Number(item.total), 0);
     const paid = (completedPayments ?? []).filter((item: any) => item.project_id === project.id).reduce((sum: number, item: any) => sum + Number(item.amount), 0);
-    return { ...project, estimate, balance: Math.max(0, base + changes - paid) };
+    return { ...project, estimate, balance: Math.max(0, base + changes - paid), sentAt: latestSentAt(project.id) };
   }).filter((project: any) => project.balance > 0.005);
 
   const milestonePaid = new Map<string, number>();
@@ -75,7 +123,8 @@ export async function ProjectTodayContent({ embedded = false }: { embedded?: boo
   const paymentMilestones = (milestones ?? []).map((milestone: any) => {
     const total = Number(milestone.estimates?.total ?? 0);
     const expected = milestone.amount_type === "percentage" ? total * Number(milestone.amount_value) / 100 : Number(milestone.amount_value);
-    return { ...milestone, expected, balance: Math.max(0, expected - (milestonePaid.get(milestone.id) ?? 0)) };
+    const projectId = milestone.estimates?.projects?.id;
+    return { ...milestone, expected, balance: Math.max(0, expected - (milestonePaid.get(milestone.id) ?? 0)), sentAt: projectId ? latestSentAt(projectId, milestone.id) : null };
   }).filter((milestone: any) => milestone.balance > 0.005 && milestone.estimates?.projects?.status !== "complete");
   const overdueMilestones = paymentMilestones.filter((milestone: any) => milestone.due_date < today);
   const dueMilestones = paymentMilestones.filter((milestone: any) => milestone.due_date >= today);
@@ -88,18 +137,18 @@ export async function ProjectTodayContent({ embedded = false }: { embedded?: boo
 
   return <section className={embedded ? "dashboard-today" : undefined}>
     {embedded
-      ? <div className="dashboard-today-heading"><div><span>Today in the field</span><h2>Project Today</h2><p>Tasks, overdue balances, decisions, and active jobs—up front.</p></div><Link href="/today">Open full page <ExternalLink size={15}/></Link></div>
+      ? <div className="dashboard-today-heading"><div><span>Today in the field</span><h2>Project Today</h2></div><Link href="/today">Open full page <ExternalLink size={15}/></Link></div>
       : <PageHeader eyebrow={new Date(`${today}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })} title="Project Today" description="One field-ready view of what needs attention now—tasks, deadlines, decisions, payments, and the clock." actions={<Link href="/time" className="button button--gold"><Clock3 size={17}/>{activeTime ? "Clock is running" : "Track time"}</Link>}/>
     }
     {activeTime && <section className="today-clock panel"><Clock3/><div><span>Currently clocked in</span><strong>{(activeTime as any).projects?.name}</strong><small>Started {new Date(activeTime.started_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small></div><Link href="/time" className="button button--outline">Open time clock</Link></section>}
     <div className="today-grid"><div className="stack">
-      {(overdueInvoices.length > 0 || overdueMilestones.length > 0) && <section className="panel today-overdue"><div className="panel-heading"><div><h2><AlertTriangle size={20}/> Overdue payments</h2><p>Completed work and past-due milestones that still have a balance.</p></div><strong className="today-count">{overdueInvoices.length + overdueMilestones.length}</strong></div><div className="today-overdue-list">
-        {overdueInvoices.map((project: any) => <article key={`invoice-${project.id}`}><CircleDollarSign/><div><strong>{project.customers?.first_name} {project.customers?.last_name} · {project.name}</strong><span>Completed final invoice · {project.estimate?.estimate_number}</span></div><b>{money(project.balance)}</b><Link className="button button--gold button--small" href={`/projects/${project.id}/invoice`}>Send invoice</Link></article>)}
-        {overdueMilestones.map((milestone: any) => <article key={`milestone-${milestone.id}`}><CalendarDays/><div><strong>{milestone.title} · {milestone.estimates?.projects?.name}</strong><span>Due {new Date(`${milestone.due_date}T12:00:00`).toLocaleDateString()}</span></div><b>{money(milestone.balance)}</b>{milestone.estimates?.projects?.id && <Link href={`/projects/${milestone.estimates.projects.id}`}>Open</Link>}</article>)}
+      {(overdueInvoices.length > 0 || overdueMilestones.length > 0) && <section className="panel today-overdue"><div className="panel-heading"><div><h2><AlertTriangle size={20}/> Overdue payments</h2>{!embedded && <p>Completed work and past-due milestones that still have a balance.</p>}</div><strong className="today-count">{overdueInvoices.length + overdueMilestones.length}</strong></div><div className="today-overdue-list">
+        {overdueInvoices.map((project: any) => <article className={project.sentAt ? "today-overdue-item--sent" : undefined} key={`invoice-${project.id}`}><CircleDollarSign/><div><strong><Link href={`/projects/${project.id}`}>{project.customers?.first_name} {project.customers?.last_name} · {project.name}</Link></strong><span>Completed final invoice · {project.estimate?.estimate_number}{project.sentAt ? ` · Sent ${sentLabel(project.sentAt)}` : ""}</span></div><b>{money(project.balance)}</b><div className="today-payment-actions"><Link className="button button--gold button--small" href={`/projects/${project.id}/invoice`}>Send invoice</Link>{!project.sentAt && <form action={markPaymentSent}><input type="hidden" name="estimate_id" value={project.estimate?.id || ""}/><input type="hidden" name="project_id" value={project.id}/><button className="button button--outline button--small">Mark sent</button></form>}<Link className="button button--outline button--small" href={`/payments?project=${project.id}&amount=${project.balance.toFixed(2)}`}>Record payment</Link></div></article>)}
+        {overdueMilestones.map((milestone: any) => { const projectId = milestone.estimates?.projects?.id; return <article className={milestone.sentAt ? "today-overdue-item--sent" : undefined} key={`milestone-${milestone.id}`}><CalendarDays/><div><strong>{projectId ? <Link href={`/projects/${projectId}`}>{milestone.title} · {milestone.estimates?.projects?.name}</Link> : `${milestone.title} · ${milestone.estimates?.projects?.name}`}</strong><span>Due {new Date(`${milestone.due_date}T12:00:00`).toLocaleDateString()}{milestone.sentAt ? ` · Sent ${sentLabel(milestone.sentAt)}` : ""}</span></div><b>{money(milestone.balance)}</b>{projectId && <div className="today-payment-actions">{!milestone.sentAt && <form action={markPaymentSent}><input type="hidden" name="estimate_id" value={milestone.estimate_id}/><input type="hidden" name="project_id" value={projectId}/><input type="hidden" name="milestone_id" value={milestone.id}/><button className="button button--outline button--small">Mark sent</button></form>}<Link className="button button--outline button--small" href={`/payments?project=${projectId}&milestone=${milestone.id}&amount=${milestone.balance.toFixed(2)}`}>Record payment</Link></div>}</article>; })}
       </div></section>}
-      <section className="panel"><div className="panel-heading"><div><h2>Needs attention</h2><p>Overdue, due today, or marked high priority.</p></div><strong className="today-count">{urgent.length}</strong></div><div className="today-task-list">{urgent.map(taskCard)}{!urgent.length && <p className="today-clear"><Check/>Nothing urgent. You’re clear to focus on the work.</p>}</div></section>
-      <section className="panel"><div className="panel-heading"><div><h2>Coming up</h2><p>Open job tasks without an immediate warning.</p></div><strong className="today-count">{later.length}</strong></div><div className="today-task-list">{later.map(taskCard)}{!later.length && <p className="muted">No additional tasks queued.</p>}</div></section>
-      {((selections ?? []).length > 0 || dueMilestones.length > 0 || (punchItems ?? []).length > 0) && <section className="panel"><div className="panel-heading"><div><h2>Automatic second set of eyes</h2><p>Buildr found dated commitments in estimates and projects.</p></div><AlertTriangle/></div><div className="today-watch-list">{(punchItems ?? []).map((item: any) => <article key={item.id}><ClipboardCheck/><div><strong>{item.description}</strong><span>Punch list{item.room_location ? ` · ${item.room_location}` : ""} · {item.responsible_party}{item.due_date ? ` · Due ${new Date(`${item.due_date}T12:00:00`).toLocaleDateString()}` : ""}</span></div><Link href={`/projects/${item.project_id}#closeout`}>Open</Link></article>)}{(selections ?? []).map((item: any) => <article key={item.id}><CalendarDays/><div><strong>{item.description}</strong><span>{String(item.selection_status).replaceAll("_", " ")} · {item.selection_responsibility === "customer" ? "Customer decision" : "Ironwood decision"} · Due {new Date(`${item.selection_deadline}T12:00:00`).toLocaleDateString()}</span></div>{item.estimates?.projects?.id && <Link href={`/projects/${item.estimates.projects.id}`}>Open</Link>}</article>)}{dueMilestones.map((milestone: any) => <article key={milestone.id}><CalendarDays/><div><strong>{milestone.title} · {money(milestone.balance)} remaining</strong><span>{milestone.due_trigger || "Payment milestone"} · Due today</span></div>{milestone.estimates?.projects?.id && <Link href={`/projects/${milestone.estimates.projects.id}`}>Open</Link>}</article>)}</div></section>}
+      <section className="panel"><div className="panel-heading"><div><h2>Needs attention</h2>{!embedded && <p>Overdue, due today, or marked high priority.</p>}</div><strong className="today-count">{urgent.length}</strong></div><div className="today-task-list">{urgent.map(taskCard)}{!urgent.length && <p className="today-clear"><Check/>Nothing urgent. You’re clear to focus on the work.</p>}</div></section>
+      <section className="panel"><div className="panel-heading"><div><h2>Coming up</h2>{!embedded && <p>Open job tasks without an immediate warning.</p>}</div><strong className="today-count">{later.length}</strong></div><div className="today-task-list">{later.map(taskCard)}{!later.length && <p className="muted">No additional tasks queued.</p>}</div></section>
+      {((selections ?? []).length > 0 || dueMilestones.length > 0 || (punchItems ?? []).length > 0) && <section className="panel"><div className="panel-heading"><div><h2>Automatic second set of eyes</h2>{!embedded && <p>Buildr found dated commitments in estimates and projects.</p>}</div><AlertTriangle/></div><div className="today-watch-list">{(punchItems ?? []).map((item: any) => <article key={item.id}><ClipboardCheck/><div><strong>{item.description}</strong><span>Punch list{item.room_location ? ` · ${item.room_location}` : ""} · {item.responsible_party}{item.due_date ? ` · Due ${new Date(`${item.due_date}T12:00:00`).toLocaleDateString()}` : ""}</span></div><Link href={`/projects/${item.project_id}#closeout`}>Open</Link></article>)}{(selections ?? []).map((item: any) => <article key={item.id}><CalendarDays/><div><strong>{item.description}</strong><span>{String(item.selection_status).replaceAll("_", " ")} · {item.selection_responsibility === "customer" ? "Customer decision" : "Ironwood decision"} · Due {new Date(`${item.selection_deadline}T12:00:00`).toLocaleDateString()}</span></div>{item.estimates?.projects?.id && <Link href={`/projects/${item.estimates.projects.id}`}>Open</Link>}</article>)}{dueMilestones.map((milestone: any) => <article key={milestone.id}><CalendarDays/><div><strong>{milestone.title} · {money(milestone.balance)} remaining</strong><span>{milestone.due_trigger || "Payment milestone"} · Due today</span></div>{milestone.estimates?.projects?.id && <Link href={`/projects/${milestone.estimates.projects.id}`}>Open</Link>}</article>)}</div></section>}
     </div><aside className="stack">
       <section className="panel"><h2><Plus size={20}/> Add today’s task</h2><form action={addTask} className="stack"><label>Project<select name="project_id" required><option value="">Choose project…</option>{(projects ?? []).map((project: any) => <option key={project.id} value={project.id}>{project.name} — {project.customers?.first_name} {project.customers?.last_name}</option>)}</select></label><label>What needs done?<input name="title" required placeholder="Pick up vanity and faucet"/></label><label>Details<textarea name="notes" rows={3} placeholder="Measurements, materials, person to call…"/></label><div className="field-pair"><label>Due date<input type="date" name="due_date" defaultValue={today}/></label><label>Priority<select name="priority" defaultValue="normal"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div><button className="button button--gold">Add to Project Today</button></form></section>
       <section className="panel"><h2>Active jobs</h2><div className="record-list">{(projects ?? []).map((project: any) => <Link href={`/projects/${project.id}`} key={project.id}><div><strong>{project.name}</strong><span>{project.customers?.first_name} {project.customers?.last_name}</span></div><span className="capitalize">{String(project.status).replaceAll("_", " ")}</span></Link>)}</div></section>

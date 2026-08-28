@@ -65,12 +65,15 @@ export function SmartTimeDashboard({
   const [projectId, setProjectId] = useState(activeEntry?.project_id ?? projects[0]?.id ?? "");
 
   useEffect(() => {
-    const remembered = window.localStorage.getItem("buildr-last-project");
-    if (!activeEntry && remembered && projects.some((project) => project.id === remembered)) {
-      setProjectId(remembered);
-    }
+    const restoreTimer = window.setTimeout(() => {
+      const remembered = window.localStorage.getItem("buildr-last-project");
+      if (!activeEntry && remembered && projects.some((project) => project.id === remembered)) setProjectId(remembered);
+    }, 0);
     const timer = window.setInterval(() => setNow(Date.now()), 30000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(restoreTimer);
+      window.clearInterval(timer);
+    };
   }, [activeEntry, projects]);
 
   const summary = useMemo(() => {
@@ -166,7 +169,7 @@ export function SmartTimeDashboard({
             <Clock3 size={15} /> Smart time clock
           </span>
           <h2 style={{ marginTop: 7 }}>{activeEntry ? "You’re on the clock." : "Start work. Buildr handles the rest."}</h2>
-          <p>{activeEntry ? (activeProject ? projectLabel(activeProject) : "Active project") : "Pick the job once and tap Start Work. No timesheet math later."}</p>
+          {activeEntry && <strong style={{ display: "block", marginTop: 8, color: "var(--green)" }}>{activeProject ? projectLabel(activeProject) : "Active project"}</strong>}
         </div>
         <div style={{ textAlign: "right", minWidth: 110 }}>
           <strong style={{ display: "block", fontSize: 24 }}>{durationText(activeEntry ? minutesFor(activeEntry, now) : summary.todayMinutes)}</strong>

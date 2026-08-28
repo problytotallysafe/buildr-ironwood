@@ -183,6 +183,12 @@
 .today-overdue-list article span { color: var(--muted); font-size: .78rem; }
 .today-overdue-list article > b { color: #8f2727; font-size: 1.05rem; white-space: nowrap; }
 .today-overdue-list article > a:not(.button) { color: var(--green); font-weight: 850; }
+.today-overdue-list article.today-overdue-item--sent { border-color: #e6c676; background: #fff9e8; }
+.today-overdue-list article.today-overdue-item--sent > svg, .today-overdue-list article.today-overdue-item--sent > b { color: #956e0b; }
+.today-overdue-list article strong a { color: var(--green); }
+.today-overdue-list article strong a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.today-payment-actions { display: flex !important; grid-template-columns: none !important; flex-direction: row; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
+.today-payment-actions form { margin: 0; }
 .today-clock { display: flex; align-items: center; gap: 15px; margin-bottom: 22px; border-color: var(--gold); background: #fffaf0; }
 .today-clock > svg { color: var(--gold); }
 .today-clock > div { display: grid; flex: 1; }
@@ -214,7 +220,8 @@
   .dashboard-today { padding: 14px; }
   .dashboard-today-heading { align-items: flex-start; flex-direction: column; }
   .today-overdue-list article { grid-template-columns: auto 1fr; }
-  .today-overdue-list article > b, .today-overdue-list article > a { grid-column: 2; }
+  .today-overdue-list article > b, .today-overdue-list article > a, .today-overdue-list article > .today-payment-actions { grid-column: 2; }
+  .today-payment-actions { justify-content: flex-start; }
   .today-task { grid-template-columns: auto 1fr auto; }
   .today-task > a { grid-column: 2; }
   .today-clock { align-items: flex-start; flex-wrap: wrap; }
