@@ -4,6 +4,7 @@ import { AlertTriangle, CalendarDays, Check, CircleDollarSign, ClipboardCheck, C
 import { PageHeader } from "@/components/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/money";
+import { ACTIVE_PROJECT_STATUSES } from "@/lib/projects";
 
 function localDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
@@ -66,13 +67,13 @@ export async function ProjectTodayContent({ embedded = false }: { embedded?: boo
   const supabase = await createClient();
   const today = localDateKey();
   const [{ data: projects }, { data: completedProjects }, { data: tasks }, { data: selections }, { data: milestones }, { data: punchItems }, { data: activeTime }, { data: milestonePayments }] = await Promise.all([
-    supabase.from("projects").select("id,name,status,project_address,customers(first_name,last_name),estimates(id,estimate_number,total)").in("status", ["scheduled", "in_progress", "waiting", "on_hold"]).order("created_at", { ascending: false }),
+    supabase.from("projects").select("id,name,status,project_address,customers(first_name,last_name),estimates(id,estimate_number,total)").in("status", [...ACTIVE_PROJECT_STATUSES]).order("created_at", { ascending: false }),
     supabase.from("projects").select("id,name,status,updated_at,contract_total,customers(first_name,last_name),estimates(id,estimate_number,total)").eq("status", "complete").order("updated_at", { ascending: false }),
     supabase.from("project_tasks").select("*,projects(id,name)").order("status").order("due_date", { ascending: true, nullsFirst: false }).order("priority", { ascending: false }),
     supabase.from("estimate_items").select("id,estimate_id,description,selection_status,selection_responsibility,selection_deadline,estimates(projects(id,name))").in("selection_status", ["allowance", "undecided", "customer_supplied"]).not("selection_deadline", "is", null).lte("selection_deadline", today).order("selection_deadline"),
     supabase.from("estimate_payment_milestones").select("id,estimate_id,title,amount_type,amount_value,due_trigger,due_date,estimates(total,projects(id,name,status))").not("due_date", "is", null).lte("due_date", today).order("due_date"),
     supabase.from("project_punch_items").select("id,project_id,description,room_location,responsible_party,due_date,priority,projects(name)").eq("status", "open").or(`due_date.lte.${today},priority.in.(high,urgent)`).order("due_date", { ascending: true, nullsFirst: false }),
-    supabase.from("time_entries").select("id,project_id,started_at,projects(name)").is("ended_at", null).maybeSingle(),
+    supabase.from("time_entries").select("id,project_id,started_at,projects(name)").is("team_member_id", null).is("ended_at", null).order("started_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("payments").select("project_id,milestone_id,amount").not("milestone_id", "is", null),
   ]);
 

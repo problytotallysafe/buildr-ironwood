@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { ACTIVE_PROJECT_STATUSES } from "@/lib/projects";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +39,8 @@ export default async function PrivateLayout({ children }: { children: React.Reac
       .from("projects")
       .select("id,name,project_address,jobsite_latitude,jobsite_longitude,geofence_radius_meters,gps_clock_in_enabled,estimates(title)")
       .eq("gps_clock_in_enabled", true)
-      .in("status", ["scheduled", "in_progress", "waiting"]),
+      .in("status", [...ACTIVE_PROJECT_STATUSES])
+      .order("created_at", { ascending: false }),
   ]);
 
   return (

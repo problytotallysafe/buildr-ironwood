@@ -25,7 +25,11 @@ type TimeEntry = {
 };
 
 function projectLabel(project: ProjectOption) {
-  return project.estimates?.title || project.name || "Project";
+  const title = project.estimates?.title || project.name || "Project";
+  const customer = project.customers
+    ? `${project.customers.first_name ?? ""} ${project.customers.last_name ?? ""}`.trim()
+    : "";
+  return customer ? `${title} — ${customer}` : title;
 }
 
 function minutesFor(entry: TimeEntry, now = Date.now()) {
@@ -68,13 +72,14 @@ export function SmartTimeDashboard({
     const restoreTimer = window.setTimeout(() => {
       const remembered = window.localStorage.getItem("buildr-last-project");
       if (!activeEntry && remembered && projects.some((project) => project.id === remembered)) setProjectId(remembered);
+      else if (!activeEntry && !projects.some((project) => project.id === projectId)) setProjectId(projects[0]?.id ?? "");
     }, 0);
     const timer = window.setInterval(() => setNow(Date.now()), 30000);
     return () => {
       window.clearTimeout(restoreTimer);
       window.clearInterval(timer);
     };
-  }, [activeEntry, projects]);
+  }, [activeEntry, projectId, projects]);
 
   const summary = useMemo(() => {
     const current = new Date(now);
@@ -160,6 +165,11 @@ export function SmartTimeDashboard({
   }
 
   const activeProject = projects.find((project) => project.id === activeEntry?.project_id);
+  const activeProjectLabel = activeProject
+    ? projectLabel(activeProject)
+    : activeEntry?.projects?.estimates?.title ||
+      activeEntry?.projects?.name ||
+      "Active project";
 
   return (
     <section className="panel" style={{ marginBottom: 22, border: "1px solid rgba(193,154,64,.42)" }}>
@@ -169,7 +179,7 @@ export function SmartTimeDashboard({
             <Clock3 size={15} /> Smart time clock
           </span>
           <h2 style={{ marginTop: 7 }}>{activeEntry ? "You’re on the clock." : "Time clock"}</h2>
-          {activeEntry && <strong style={{ display: "block", marginTop: 8, color: "var(--green)" }}>{activeProject ? projectLabel(activeProject) : "Active project"}</strong>}
+          {activeEntry && <strong style={{ display: "block", marginTop: 8, color: "var(--green)" }}>{activeProjectLabel}</strong>}
         </div>
         <div style={{ textAlign: "right", minWidth: 110 }}>
           <strong style={{ display: "block", fontSize: 24 }}>{durationText(activeEntry ? minutesFor(activeEntry, now) : summary.todayMinutes)}</strong>
@@ -186,6 +196,7 @@ export function SmartTimeDashboard({
               onChange={(event) => setProjectId(event.target.value)}
               style={{ width: "100%", minHeight: 46 }}
             >
+              <option value="">{projects.length ? "Choose a project…" : "No active projects"}</option>
               {projects.map((project) => <option key={project.id} value={project.id}>{projectLabel(project)}</option>)}
             </select>
           </label>

@@ -132,6 +132,10 @@ type EstimateBuilderProps = {
   selectedCustomer?: string;
   initialEstimate?: InitialEstimate;
   preset?: EstimatePreset;
+  sourceSiteVisit?: {
+    id: string;
+    customerId: string;
+  };
 };
 
 function makeId() {
@@ -221,6 +225,7 @@ export function EstimateBuilder({
   selectedCustomer,
   initialEstimate,
   preset,
+  sourceSiteVisit,
 }: EstimateBuilderProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -554,6 +559,11 @@ export function EstimateBuilder({
       return;
     }
 
+    if (sourceSiteVisit && customerId !== sourceSiteVisit.customerId) {
+      setError("Keep the site visit’s customer selected so the estimate stays linked to the correct job.");
+      return;
+    }
+
     setBusy(true);
 
     try {
@@ -757,6 +767,18 @@ export function EstimateBuilder({
 
         if (milestoneError) {
           setError(milestoneError.message);
+          return;
+        }
+      }
+
+      if (!isEditing && sourceSiteVisit) {
+        const { error: siteVisitError } = await supabase
+          .from("site_visit_worksheets")
+          .update({ estimate_id: estimateId, status: "complete" })
+          .eq("id", sourceSiteVisit.id);
+
+        if (siteVisitError) {
+          setError(siteVisitError.message);
           return;
         }
       }

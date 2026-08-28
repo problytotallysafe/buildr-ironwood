@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/money";
+import { isProjectStatus } from "@/lib/projects";
 import { StatusPill } from "@/components/status-pill";
 
 const projectFilters = [
@@ -21,7 +22,7 @@ export default async function ProjectsPage({searchParams}:{searchParams:Promise<
     .select(
       "*,customers(first_name,last_name),estimates(estimate_number,title,total)",
     );
-  if (["scheduled","in_progress","waiting","on_hold","substantially_complete","complete"].includes(filter)) request = request.eq("status", filter);
+  if (isProjectStatus(filter)) request = request.eq("status", filter);
   const { data: rows } = await request.order("created_at", { ascending: false });
   const hasBalance = (project: any) => Number(project.amount_paid ?? 0) + 0.005 < Number(project.contract_total ?? project.estimates?.total ?? 0);
   const data = (rows ?? []).filter((project: any) => {

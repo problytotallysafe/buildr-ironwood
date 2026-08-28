@@ -19,10 +19,14 @@ export default async function EditSiteVisitPage({ params }: { params: Promise<{ 
   async function save(formData: FormData) {
     "use server";
     const client = await createClient();
+    const customerId = String(formData.get("customer_id") || "").trim();
+    const next = String(formData.get("_next") || "visits");
     const values = Object.fromEntries(["customer_id","visit_date","project_type","people_present","client_goals","measurements","existing_conditions","plumbing_notes","electrical_notes","hvac_notes","access_protection","selections_discussed","unanswered_questions","follow_up_items","photo_notes","status"].map((key) => [key, String(formData.get(key) || "").trim() || null]));
-    await client.from("site_visit_worksheets").update({ ...values, project_id: String(formData.get("project_id") || "") || null, estimate_id: String(formData.get("estimate_id") || "") || null }).eq("id", id);
+    const { error } = await client.from("site_visit_worksheets").update({ ...values, project_id: String(formData.get("project_id") || "") || null, estimate_id: String(formData.get("estimate_id") || "") || null }).eq("id", id);
+    if (error) throw new Error(error.message);
     revalidatePath("/site-visits");
     revalidatePath(`/site-visits/${id}/edit`);
+    if (next === "estimate") redirect(`/estimates/new?setup=1&customer=${customerId}&projectType=other&siteVisit=${id}`);
     redirect("/site-visits");
   }
   const photos = await Promise.all((media ?? []).map(async (item: any) => ({ ...item, signed_url: (await supabase.storage.from("site-visit-media").createSignedUrl(item.storage_path, 3600)).data?.signedUrl ?? null })));

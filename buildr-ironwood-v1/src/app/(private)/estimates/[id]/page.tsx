@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink, Pencil } from "lucide-react";
+import { BriefcaseBusiness, ClipboardList, ExternalLink, Pencil } from "lucide-react";
 import { AcceptanceEvidence } from "@/components/acceptance-evidence";
 import { EstimateActions } from "@/components/estimate-actions";
 import { EstimateRevisionComparison } from "@/components/estimate-revision-comparison";
@@ -16,13 +16,15 @@ import { createClient } from "@/lib/supabase/server";
 export default async function EstimatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [{ data: estimate }, { data: items }, { data: milestones }, { data: events }, { data: revisions }, { data: evidenceRows }] = await Promise.all([
+  const [{ data: estimate }, { data: items }, { data: milestones }, { data: events }, { data: revisions }, { data: evidenceRows }, { data: project }, { data: siteVisit }] = await Promise.all([
     supabase.from("estimates").select("*,customers(*)").eq("id", id).single(),
     supabase.from("estimate_items").select("*").eq("estimate_id", id).order("sort_order"),
     supabase.from("estimate_payment_milestones").select("*").eq("estimate_id", id).order("sort_order"),
     supabase.from("estimate_events").select("*").eq("estimate_id", id).order("created_at", { ascending: false }).limit(20),
     supabase.from("estimate_revisions").select("id,revision_number,reason,prior_status,prior_accepted_at,prior_accepted_by_name,created_at,estimate_snapshot,items_snapshot").eq("estimate_id", id).order("revision_number", { ascending: false }),
     supabase.from("estimate_acceptance_evidence").select("*").eq("estimate_id", id).order("created_at", { ascending: false }),
+    supabase.from("projects").select("id,status").eq("estimate_id", id).maybeSingle(),
+    supabase.from("site_visit_worksheets").select("id,visit_date").eq("estimate_id", id).order("visit_date", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (!estimate) notFound();
 
@@ -37,7 +39,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ id: s
   }));
 
   return <div className="page-wrap">
-    <PageHeader eyebrow={`${estimate.estimate_number}${estimate.revision_number ? ` • Revision ${estimate.revision_number}` : ""}`} title={estimate.title} description={`${estimate.customers?.first_name ?? ""} ${estimate.customers?.last_name ?? ""}`} actions={<div className="button-row"><Link href={`/estimates/${id}/edit`} className="button button--outline"><Pencil size={15}/>Edit</Link><EstimateActions estimateId={id} estimateNumber={estimate.estimate_number} status={estimate.status} redirectAfterDelete/><a href={link} target="_blank" rel="noreferrer" className="button button--outline">Preview <ExternalLink size={15}/></a><TextEstimateButton id={id} disabled={!estimate.customers?.phone || estimate.status === "accepted"} warnings={sendWarnings}/><SendEstimateButton id={id} disabled={!estimate.customers?.email || estimate.status === "accepted"} warnings={sendWarnings}/></div>}/>
+    <PageHeader eyebrow={`${estimate.estimate_number}${estimate.revision_number ? ` • Revision ${estimate.revision_number}` : ""}`} title={estimate.title} description={`${estimate.customers?.first_name ?? ""} ${estimate.customers?.last_name ?? ""}`} actions={<div className="button-row">{project && <Link href={`/projects/${project.id}`} className="button button--gold"><BriefcaseBusiness size={15}/>Open project</Link>}<Link href={`/estimates/${id}/edit`} className="button button--outline"><Pencil size={15}/>{estimate.status === "accepted" ? "Revise" : "Edit"}</Link><EstimateActions estimateId={id} estimateNumber={estimate.estimate_number} status={estimate.status} redirectAfterDelete/>{siteVisit && <Link href={`/site-visits/${siteVisit.id}/edit`} className="button button--outline"><ClipboardList size={15}/>Site visit</Link>}<a href={link} target="_blank" rel="noreferrer" className="button button--outline">Preview <ExternalLink size={15}/></a>{estimate.status !== "accepted" && <><TextEstimateButton id={id} disabled={!estimate.customers?.phone} warnings={sendWarnings}/><SendEstimateButton id={id} disabled={!estimate.customers?.email} warnings={sendWarnings}/></>}</div>}/>
     <div className="detail-grid detail-grid--wide">
       <div className="stack">
         <section className="panel"><div className="panel-heading"><div><h2>Estimate</h2><StatusPill value={estimate.status}/></div><strong className="big-total">{money(estimate.total)}</strong></div><div className="table-wrap"><table><thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Customer price</th></tr></thead><tbody>{(items ?? []).map((item: any) => <tr key={item.id}><td>{item.description}<small>{[item.category, item.vendor, item.vendor_sku].filter(Boolean).join(" · ")}</small></td><td>{item.quantity}</td><td>{item.unit}</td><td>{money(item.line_total)}</td></tr>)}</tbody></table></div><dl className="totals totals--right"><div><dt>Base cost</dt><dd>{money(estimate.subtotal)}</dd></div><div><dt>Markup</dt><dd>{money(estimate.markup_total)}</dd></div><div><dt>Tax</dt><dd>{money(estimate.tax_total)}</dd></div><div className="grand"><dt>Total</dt><dd>{money(estimate.total)}</dd></div></dl></section>

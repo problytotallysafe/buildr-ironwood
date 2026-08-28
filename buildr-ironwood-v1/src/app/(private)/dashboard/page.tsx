@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { SmartTimeDashboard } from "@/components/smart-time-dashboard";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/money";
+import { ACTIVE_PROJECT_STATUSES } from "@/lib/projects";
 import { StatusPill } from "@/components/status-pill";
 import { ProjectTodayContent } from "@/app/(private)/today/page";
 
@@ -52,14 +53,14 @@ export default async function DashboardPage() {
   const [customers, openEstimates, projects, payments, recent, activeProjects, recentTime, activeOwnerTime] = await Promise.all([
     supabase.from("customers").select("id", { count: "exact", head: true }),
     supabase.from("estimates").select("id,total,status", { count: "exact" }).in("status", ["draft", "sent", "viewed"]),
-    supabase.from("projects").select("id", { count: "exact", head: true }).neq("status", "complete"),
+    supabase.from("projects").select("id", { count: "exact", head: true }).in("status", [...ACTIVE_PROJECT_STATUSES]),
     supabase.from("payments").select("amount").gte("received_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
     supabase.from("estimates").select("id,estimate_number,title,status,total,created_at,customers(first_name,last_name)").order("created_at", { ascending: false }).limit(6),
     supabase
       .from("projects")
-      .select("id,name,project_address,status,updated_at,estimates(title),customers(first_name,last_name)")
-      .neq("status", "complete")
-      .order("updated_at", { ascending: false }),
+      .select("id,name,project_address,status,created_at,estimates(title),customers(first_name,last_name)")
+      .in("status", [...ACTIVE_PROJECT_STATUSES])
+      .order("created_at", { ascending: false }),
     supabase
       .from("time_entries")
       .select("id,project_id,started_at,ended_at,duration_minutes,projects(name,estimates(title))")

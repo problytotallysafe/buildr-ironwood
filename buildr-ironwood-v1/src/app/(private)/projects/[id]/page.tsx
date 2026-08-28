@@ -9,19 +9,25 @@ import { ProjectMedia } from "@/components/project-media";
 import { ProjectCloseout } from "@/components/project-closeout";
 import { StatusPill } from "@/components/status-pill";
 import { money } from "@/lib/money";
+import {
+  isActiveProjectStatus,
+  isProjectStatus,
+  PROJECT_STATUS_OPTIONS,
+} from "@/lib/projects";
 import { createClient } from "@/lib/supabase/server";
 
 async function updateProjectStatus(formData: FormData) {
   "use server";
   const projectId = String(formData.get("project_id") || "");
   const status = String(formData.get("status") || "");
-  const allowedStatuses = ["scheduled", "in_progress", "waiting", "substantially_complete", "complete", "on_hold"];
-  if (!projectId || !allowedStatuses.includes(status)) return;
+  if (!projectId || !isProjectStatus(status)) return;
   const supabase = await createClient();
   const { error } = await supabase.from("projects").update({ status }).eq("id", projectId);
   if (error) throw new Error(error.message);
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/projects");
+  revalidatePath("/time");
+  revalidatePath("/today");
   revalidatePath("/dashboard");
 }
 
@@ -108,6 +114,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const contractTotal = Number(project.contract_total ?? estimate?.total ?? 0);
   const amountPaid = Number(project.amount_paid ?? 0);
   const remaining = Math.max(0, contractTotal - amountPaid);
+  const activeProject = isActiveProjectStatus(project.status);
 
   return (
     <div className="page-wrap">
@@ -125,19 +132,22 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         }
       />
 
-      <div style={{ display:"flex", gap:"12px", marginBottom:"18px" }}>
-        <Link href={`/time?project=${project.id}`} className="button button--gold">
-          <Clock3 size={17}/>Track Time
-        </Link>
+      <div className="button-row project-primary-actions">
+        {activeProject && <Link href={`/time?project=${project.id}`} className="button button--gold">
+          <Clock3 size={17}/>Track time
+        </Link>}
         <Link href={`/projects/${project.id}/edit`} className="button button--outline">
-          <Pencil size={17}/>Edit Project
+          <Pencil size={17}/>Edit project
         </Link>
-        <Link href={`/projects/${project.id}/change-orders/new`} className="button button--outline">
-          <Plus size={17}/>Add Change Order
-        </Link>
+        {activeProject && <Link href={`/projects/${project.id}/change-orders/new`} className="button button--outline">
+          <Plus size={17}/>Add change order
+        </Link>}
         <Link href={`/projects/${project.id}/invoice`} className="button button--outline">
-          <ReceiptText size={17}/>{["substantially_complete", "complete"].includes(project.status) ? "Send Final Invoice" : "Final Invoice"}
+          <ReceiptText size={17}/>{["substantially_complete", "complete"].includes(project.status) ? "Final invoice" : "Preview final invoice"}
         </Link>
+        {remaining > 0 && <Link href={`/payments?project=${project.id}&amount=${remaining}`} className="button button--outline">
+          <CreditCard size={17}/>Record payment
+        </Link>}
       </div>
 
       <section className="project-overview-grid">
@@ -150,7 +160,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
       <section id="status" className="panel project-status-panel project-section-anchor">
         <div><span className="project-overview-label">Project status</span><h2>Keep the job’s current stage clear</h2><p>Construction status and payment status are tracked separately. A completed job with a balance stays in Current projects as Complete — awaiting payment.</p></div>
-        <form action={updateProjectStatus} className="project-status-form"><input type="hidden" name="project_id" value={project.id}/><label>Status<select name="status" defaultValue={project.status}><option value="scheduled">Scheduled</option><option value="in_progress">In progress</option><option value="waiting">Waiting</option><option value="on_hold">On hold</option><option value="substantially_complete">Substantially complete</option><option value="complete">Complete</option></select></label><button className="button button--gold">Update status</button></form>
+        <form action={updateProjectStatus} className="project-status-form"><input type="hidden" name="project_id" value={project.id}/><label>Status<select name="status" defaultValue={project.status}>{PROJECT_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><button className="button button--gold">Update status</button></form>
       </section>
 
       <section id="contract" className="panel project-contract-panel project-section-anchor">
@@ -174,7 +184,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       <LaborVsActual laborItems={(laborItems ?? []) as any} timeEntries={(timeEntries ?? []) as any}/>
 
       <section className="panel project-change-orders">
-        <div className="panel-heading"><div><h2>Change orders</h2><p>Project-linked scope changes with their own customer approval trail.</p></div><Link href={`/projects/${project.id}/change-orders/new`} className="button button--gold"><Plus size={16}/>New change order</Link></div>
+        <div className="panel-heading"><div><h2>Change orders</h2><p>Project-linked scope changes with their own customer approval trail.</p></div>{activeProject && <Link href={`/projects/${project.id}/change-orders/new`} className="button button--gold"><Plus size={16}/>New change order</Link>}</div>
         <div className="table-wrap"><table><thead><tr><th>Change order</th><th>Status</th><th>Date</th><th>Price change</th></tr></thead><tbody>{(changeOrders??[]).map((co:any)=><tr key={co.id}><td><Link className="table-link" href={`/change-orders/${co.id}`}>{co.change_order_number}<small>{co.title}</small></Link></td><td><StatusPill value={co.status}/></td><td>{new Date(co.created_at).toLocaleDateString()}</td><td>{money(co.total)}</td></tr>)}{!changeOrders?.length&&<tr><td colSpan={4} className="empty-cell">No change orders for this project.</td></tr>}</tbody></table></div>
       </section>
 

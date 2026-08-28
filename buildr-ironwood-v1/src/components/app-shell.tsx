@@ -14,6 +14,7 @@ import {
   LineChart,
   Inbox,
   LogOut,
+  MapPin,
   Menu,
   Bell,
   Settings,
@@ -35,17 +36,18 @@ const nav: Array<{
   badge?: "leads" | "notifications";
 }> = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/notifications", label: "Notifications", icon: Bell, badge: "notifications" },
   { href: "/today", label: "Project Today", icon: CalendarCheck2 },
   { href: "/intake", label: "New Client Intake", icon: ClipboardList },
-  { href: "/customers", label: "Customers", icon: Users },
   { href: "/leads", label: "Leads", icon: Inbox, badge: "leads" },
+  { href: "/customers", label: "Customers", icon: Users },
+  { href: "/site-visits", label: "Site Visits", icon: MapPin },
   { href: "/estimates", label: "Estimates", icon: FileText },
   { href: "/projects", label: "Projects", icon: BriefcaseBusiness },
   { href: "/time", label: "Time Tracker", icon: Clock3 },
   { href: "/payments", label: "Payments", icon: CreditCard },
   { href: "/analytics", label: "Analytics", icon: LineChart },
   { href: "/catalog", label: "Price Book", icon: BookOpen },
+  { href: "/notifications", label: "Notifications", icon: Bell, badge: "notifications" },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

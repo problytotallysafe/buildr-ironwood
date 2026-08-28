@@ -14,7 +14,7 @@ const intakeOptions = [
 export default function IntakePage() {
   return <div className="page-wrap">
     <PageHeader eyebrow="Connected workflow" title="New Client Intake"/>
-    <section className="intake-flow" aria-label="Client workflow"><span>Lead</span><b>→</b><span>Customer</span><b>→</b><span>Site visit</span><b>→</b><span>Estimate</span><b>→</b><span>Project</span></section>
+    <section className="intake-flow" aria-label="Client workflow"><span>Lead</span><b>→</b><span>Customer</span><b>→</b><span>Site visit</span><b>→</b><span>Estimate</span><b>→</b><span>Project</span><b>→</b><span>Work & changes</span><b>→</b><span>Invoice</span><b>→</b><span>Paid</span></section>
     <section className="intake-grid">{intakeOptions.map(({href,title,copy,icon:Icon})=><Link className="panel intake-card" href={href} key={href}><Icon/><div><h2>{title}</h2><p>{copy}</p></div></Link>)}</section>
   </div>;
 }

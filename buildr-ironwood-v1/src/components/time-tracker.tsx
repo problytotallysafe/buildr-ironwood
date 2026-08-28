@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 type ProjectOption = {
   id: string;
   name: string | null;
+  status: string;
   estimates: {
     title: string | null;
     estimate_number: string | null;
@@ -240,6 +241,20 @@ export function TimeTracker({
 
   const [error, setError] =
     useState("");
+
+  const editingEntry = editingEntryId
+    ? entries.find((entry) => entry.id === editingEntryId) ?? null
+    : null;
+
+  const editingProjectMissing = Boolean(
+    editingEntry && !projects.some((project) => project.id === editingEntry.project_id),
+  );
+
+  const editingProjectLabel = editingEntry
+    ? editingEntry.projects?.estimates?.title ||
+      editingEntry.projects?.name ||
+      "Original project"
+    : "Original project";
 
   const totals = useMemo(() => {
     let minutes = 0;
@@ -825,7 +840,9 @@ export function TimeTracker({
                 }
               >
                 <option value="">
-                  Choose a project…
+                  {projects.length
+                    ? "Choose a project…"
+                    : "No active projects"}
                 </option>
 
                 {projects.map(
@@ -1022,8 +1039,16 @@ export function TimeTracker({
               }
             >
               <option value="">
-                Choose a project…
+                {projects.length
+                  ? "Choose a project…"
+                  : "No active projects"}
               </option>
+
+              {editingProjectMissing && editingEntry && (
+                <option value={editingEntry.project_id}>
+                  {editingProjectLabel} — existing entry
+                </option>
+              )}
 
               {projects.map(
                 (project) => (
@@ -1234,7 +1259,7 @@ export function TimeTracker({
             <button
               className="button button--outline"
               type="submit"
-              disabled={busy}
+              disabled={busy || !manualProjectId}
             >
               <Plus size={17} />
               {editingEntryId ? "Save time changes" : "Add time"}

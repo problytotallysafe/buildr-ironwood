@@ -1,5 +1,5 @@
 export type EstimateStatus = "draft" | "sent" | "viewed" | "accepted" | "declined" | "expired";
-export type ProjectStatus = "scheduled" | "in_progress" | "waiting" | "substantially_complete" | "complete" | "on_hold";
+export type { ProjectStatus } from "@/lib/projects";
 
 export type Customer = {
   id: string;

@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { TimeTracker } from "@/components/time-tracker";
 import { GpsClockInSettings } from "@/components/gps-clock-in";
+import { ACTIVE_PROJECT_STATUSES } from "@/lib/projects";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function TimePage({
@@ -24,6 +25,7 @@ export default async function TimePage({
       .select(
         "id,name,status,project_address,jobsite_latitude,jobsite_longitude,geofence_radius_meters,gps_clock_in_enabled,estimates(title,estimate_number),customers(first_name,last_name)",
       )
+      .in("status", [...ACTIVE_PROJECT_STATUSES])
       .order("created_at", {
         ascending: false,
       }),
@@ -62,6 +64,13 @@ export default async function TimePage({
       .limit(100),
   ]);
 
+  const activeProjects = projects ?? [];
+  const selectedProject = activeProjects.some(
+    (project) => project.id === query.project,
+  )
+    ? query.project
+    : "";
+
   return (
     <div className="page-wrap">
       <PageHeader
@@ -69,15 +78,13 @@ export default async function TimePage({
         title="Time Tracker"
       />
 
-      <GpsClockInSettings projects={(projects ?? []) as any} />
+      <GpsClockInSettings projects={activeProjects as any} />
 
       <TimeTracker
-        projects={(projects ?? []) as any}
+        projects={activeProjects as any}
         teamMembers={(teamMembers ?? []) as any}
         entries={(entries ?? []) as any}
-        selectedProject={
-          query.project ?? ""
-        }
+        selectedProject={selectedProject}
       />
     </div>
   );

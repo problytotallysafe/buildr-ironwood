@@ -290,6 +290,7 @@ export default async function NewEstimatePage({
           markup_rate: Number(settings?.default_markup_rate ?? 20),
         }}
         preset={buildPreset(query, assessment, siteVisit)}
+        sourceSiteVisit={siteVisit ? { id: siteVisit.id, customerId: siteVisit.customer_id } : undefined}
       />
     </div>
   );

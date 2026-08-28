@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { Archive, Mail, Phone, Trash2 } from "lucide-react";
+import { Archive, ClipboardList, FilePlus2, Mail, Phone, Trash2, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { leadCategories, leadPriorities, leadStatuses } from "@/lib/leads";
 import { createClient } from "@/lib/supabase/server";
@@ -49,7 +48,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     redirect("/leads?view=trash");
   }
 
-  async function convertToCustomer() {
+  async function convertToCustomer(formData: FormData) {
     "use server";
     const client = await createClient();
     const { data: { user } } = await client.auth.getUser();
@@ -78,6 +77,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     await client.from("leads").update({ status: "converted", archived_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id);
     await client.from("notifications").update({ read_at: new Date().toISOString() }).eq("href", `/leads/${id}`).is("read_at", null);
     revalidatePath("/leads");
+    const next = String(formData.get("next") || "customer");
+    if (next === "site_visit") redirect(`/site-visits/new?customer=${customerId}`);
+    if (next === "estimate") redirect(`/estimates/new?customer=${customerId}`);
     redirect(`/customers/${customerId}`);
   }
 
@@ -86,7 +88,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       <PageHeader
         eyebrow={`${lead.source || "Lead"} · ${new Date(lead.created_at).toLocaleString()}`}
         title={`${lead.first_name} ${lead.last_name || ""}`}
-        actions={<form action={convertToCustomer}><button className="button button--gold">Add as customer</button></form>}
+        actions={<form action={convertToCustomer} className="button-row"><button name="next" value="customer" className="button button--gold"><UserPlus size={16}/>Add as customer</button><button name="next" value="site_visit" className="button button--outline"><ClipboardList size={16}/>Add & site visit</button><button name="next" value="estimate" className="button button--outline"><FilePlus2 size={16}/>Add & estimate</button></form>}
       />
 
       <section className="panel stack">
@@ -94,7 +96,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           {lead.phone && <a className="button button--outline" href={`tel:${lead.phone}`}><Phone size={16} />Call</a>}
           {lead.phone && <a className="button button--outline" href={`sms:${lead.phone}`}><Phone size={16} />Text</a>}
           {lead.email && <a className="button button--outline" href={`mailto:${lead.email}`}><Mail size={16} />Email</a>}
-          <Link className="button button--outline" href={`/site-visits/new`}>Site visit</Link>
         </div>
 
         <dl className="details">

@@ -310,6 +310,14 @@
   margin-bottom: 12px;
 }
 
+.project-primary-actions {
+  margin-bottom: 18px;
+}
+
+.customer-project-history {
+  margin-top: 22px;
+}
+
 .project-detail-back a {
   display: inline-flex;
   align-items: center;
