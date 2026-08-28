@@ -5,6 +5,7 @@ import { SmartTimeDashboard } from "@/components/smart-time-dashboard";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/money";
 import { StatusPill } from "@/components/status-pill";
+import { ProjectTodayContent } from "@/app/(private)/today/page";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -49,6 +50,8 @@ export default async function DashboardPage() {
   return (
     <div className="page-wrap">
       <PageHeader eyebrow="Ironwood command center" title="Good work starts with a clear plan." description="See what needs attention, build the next proposal, and keep every job moving." actions={<Link className="button button--gold" href="/estimates/new">+ New estimate</Link>} />
+
+      <ProjectTodayContent embedded />
 
       <SmartTimeDashboard
         projects={(activeProjects.data ?? []) as any}
