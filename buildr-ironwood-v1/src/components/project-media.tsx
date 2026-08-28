@@ -44,13 +44,14 @@ export function ProjectMedia({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [category, setCategory] = useState("before");
   const [roomLocation, setRoomLocation] = useState("");
   const [caption, setCaption] = useState("");
   const [customerVisible, setCustomerVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState("");
 
   const grouped = useMemo(() => {
     return categories
@@ -66,16 +67,18 @@ export function ProjectMedia({
     event.preventDefault();
     setError("");
 
-    const selectedFile =
-      file ?? fileInputRef.current?.files?.[0] ?? null;
+    const selectedFiles = files.length
+      ? files
+      : Array.from(fileInputRef.current?.files ?? []);
 
-    if (!selectedFile) {
-      setError("Choose a photo first.");
+    if (!selectedFiles.length) {
+      setError("Choose one or more photos first.");
       return;
     }
 
-    if (!selectedFile.type.startsWith("image/")) {
-      setError("Buildr currently accepts image files only.");
+    const invalidFiles = selectedFiles.filter((selectedFile) => !selectedFile.type.startsWith("image/"));
+    if (invalidFiles.length) {
+      setError(`${invalidFiles.map((item) => item.name).join(", ")} ${invalidFiles.length === 1 ? "is" : "are"} not an image.`);
       return;
     }
 
@@ -91,31 +94,26 @@ export function ProjectMedia({
         return;
       }
 
-      const extension =
-        selectedFile.name
-          .split(".")
-          .pop()
-          ?.toLowerCase()
-          .replace(/[^a-z0-9]/g, "") || "jpg";
+      const failures: string[] = [];
+      let uploaded = 0;
 
-      const storagePath = `${user.id}/${projectId}/${crypto.randomUUID()}.${extension}`;
+      for (const [index, selectedFile] of selectedFiles.entries()) {
+        setProgress(`Uploading ${index + 1} of ${selectedFiles.length}`);
+        const extension = selectedFile.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const storagePath = `${user.id}/${projectId}/${crypto.randomUUID()}.${extension}`;
+        const { error: uploadError } = await supabase.storage
+          .from("project-media")
+          .upload(storagePath, selectedFile, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: selectedFile.type || undefined,
+          });
+        if (uploadError) {
+          failures.push(`${selectedFile.name}: ${uploadError.message}`);
+          continue;
+        }
 
-      const { error: uploadError } = await supabase.storage
-        .from("project-media")
-        .upload(storagePath, selectedFile, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: selectedFile.type || undefined,
-        });
-
-      if (uploadError) {
-        setError(uploadError.message);
-        return;
-      }
-
-      const { error: rowError } = await supabase
-        .from("project_media")
-        .insert({
+        const { error: rowError } = await supabase.from("project_media").insert({
           owner_id: user.id,
           project_id: projectId,
           estimate_id: estimateId || null,
@@ -127,28 +125,27 @@ export function ProjectMedia({
           caption: caption.trim() || null,
           customer_visible: customerVisible,
         });
-
-      if (rowError) {
-        await supabase.storage
-          .from("project-media")
-          .remove([storagePath]);
-
-        setError(rowError.message);
-        return;
+        if (rowError) {
+          await supabase.storage.from("project-media").remove([storagePath]);
+          failures.push(`${selectedFile.name}: ${rowError.message}`);
+          continue;
+        }
+        uploaded += 1;
       }
 
-      setFile(null);
-      setCategory("before");
-      setRoomLocation("");
-      setCaption("");
-      setCustomerVisible(false);
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+      if (uploaded) {
+        setFiles([]);
+        setCategory("before");
+        setRoomLocation("");
+        setCaption("");
+        setCustomerVisible(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        router.refresh();
       }
-
-      router.refresh();
+      if (failures.length) setError(failures.join(" "));
+      else setError("");
     } finally {
+      setProgress("");
       setBusy(false);
     }
   }
@@ -232,11 +229,6 @@ export function ProjectMedia({
         <div className="panel-heading">
           <div>
             <h2>Project photos</h2>
-
-            <p>
-              Keep before photos, renderings, selections, progress
-              documentation, and completed work with the job.
-            </p>
           </div>
         </div>
 
@@ -245,25 +237,23 @@ export function ProjectMedia({
           onSubmit={uploadPhoto}
         >
           <label className="span-2 project-media-file">
-            Photo
+            Photos
 
             <input
               ref={fileInputRef}
               id="project-media-file"
               type="file"
               accept="image/*"
+              multiple
               onChange={(event) => {
-                const selectedFile =
-                  event.currentTarget.files?.[0] ?? null;
-
-                setFile(selectedFile);
+                setFiles(Array.from(event.currentTarget.files ?? []));
                 setError("");
               }}
             />
 
-            {file && (
+            {files.length > 0 && (
               <p className="fine-print">
-                Selected: {file.name}
+                {files.length} photo{files.length === 1 ? "" : "s"} selected
               </p>
             )}
           </label>
@@ -329,7 +319,7 @@ export function ProjectMedia({
             >
               <Upload size={17} />
 
-              {busy ? "Uploading…" : "Upload photo"}
+              {busy ? progress || "Uploading…" : files.length ? `Upload ${files.length} photo${files.length === 1 ? "" : "s"}` : "Upload photos"}
             </button>
           </div>
         </form>

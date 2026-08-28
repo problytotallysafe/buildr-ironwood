@@ -265,7 +265,6 @@ export default async function NewEstimatePage({
         <PageHeader
           eyebrow="Smart estimate setup"
           title="Tell Buildr about the job"
-          description="Answer a few quick questions and Buildr will prepare the right starting structure. You can change everything afterward."
         />
 
         <SmartEstimateSetup
@@ -281,7 +280,6 @@ export default async function NewEstimatePage({
       <PageHeader
         eyebrow="Estimate builder"
         title="Write a detailed bid"
-        description="Buildr prepared a starting structure from your project answers. Adjust anything you need before saving."
       />
 
       <EstimateBuilder

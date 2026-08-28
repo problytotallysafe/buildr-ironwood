@@ -18,7 +18,7 @@ async function createCustomer(formData: FormData) {
 }
 
 export default function NewCustomerPage() {
-  return <div className="page-wrap page-wrap--narrow"><PageHeader eyebrow="New record" title="Add customer" description="Keep the details you need for proposals, projects, and follow-up." />
+  return <div className="page-wrap page-wrap--narrow"><PageHeader eyebrow="New record" title="Add customer" />
   <form action={createCustomer} className="panel form-grid">
     <label>First name<input name="first_name" required /></label><label>Last name<input name="last_name" required /></label>
     <label className="span-2">Company name<input name="company_name" /></label><label>Email<input name="email" type="email" /></label><label>Phone<input name="phone" /></label>

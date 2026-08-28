@@ -41,7 +41,7 @@ export function SiteVisitPhotos({ worksheetId, photos }: { worksheetId: string; 
   }
 
   return <section className="panel stack">
-    <div className="panel-heading"><div><h2>Walkthrough photos</h2><p>Photograph rooms, measurements, utilities, model numbers, damage, and anything that affects the estimate.</p></div><Camera/></div>
+    <div className="panel-heading"><div><h2>Walkthrough photos</h2></div><Camera/></div>
     <div className="form-grid"><label>Take or choose photo<input ref={input} type="file" accept="image/*" capture="environment"/></label><label>Caption / location<input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Kitchen north wall, water damage…"/></label></div>
     <div><button type="button" className="button button--gold" disabled={busy} onClick={upload}><Upload size={16}/>{busy ? "Uploading…" : "Upload photo"}</button></div>
     {error && <p className="error-box">{error}</p>}

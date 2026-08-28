@@ -26,5 +26,5 @@ export default async function EditSiteVisitPage({ params }: { params: Promise<{ 
     redirect("/site-visits");
   }
   const photos = await Promise.all((media ?? []).map(async (item: any) => ({ ...item, signed_url: (await supabase.storage.from("site-visit-media").createSignedUrl(item.storage_path, 3600)).data?.signedUrl ?? null })));
-  return <div className="page-wrap"><PageHeader eyebrow={new Date(`${worksheet.visit_date}T12:00:00`).toLocaleDateString()} title={`${worksheet.customers?.first_name ?? ""} ${worksheet.customers?.last_name ?? ""} site visit`} description="Correct measurements, add what you learned afterward, and mark it complete only when the estimate has what it needs."/><SiteVisitForm action={save} customers={customers ?? []} projects={projects ?? []} estimates={estimates ?? []} worksheet={worksheet}/><div style={{marginTop:22}}><SiteVisitPhotos worksheetId={id} photos={photos}/></div></div>;
+  return <div className="page-wrap"><PageHeader eyebrow={new Date(`${worksheet.visit_date}T12:00:00`).toLocaleDateString()} title={`${worksheet.customers?.first_name ?? ""} ${worksheet.customers?.last_name ?? ""} site visit`}/><SiteVisitForm action={save} customers={customers ?? []} projects={projects ?? []} estimates={estimates ?? []} worksheet={worksheet}/><div style={{marginTop:22}}><SiteVisitPhotos worksheetId={id} photos={photos}/></div></div>;
 }

@@ -36,7 +36,6 @@ export default async function ProjectsPage({searchParams}:{searchParams:Promise<
       <PageHeader
         eyebrow="Job tracking"
         title="Projects"
-        description="Accepted work, current stage, schedule notes, contract value, and payment progress."
       />
 
       <section className="panel list-filter-bar"><form method="get" className="button-row"><label>Show<select name="status" defaultValue={filter}>{projectFilters.map((item)=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label><button className="button button--outline">Apply</button></form><small>{data?.length??0} project{data?.length===1?"":"s"}</small></section>

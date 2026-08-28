@@ -6,6 +6,19 @@ const allowedOrigin = process.env.WEBSITE_ORIGIN || "https://ironwood-remodeling
 const cors = { "Access-Control-Allow-Origin": allowedOrigin, "Access-Control-Allow-Headers": "Content-Type, X-Buildr-Lead-Key", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 export function OPTIONS() { return new NextResponse(null, { status: 204, headers: cors }); }
 
+function leadCategory(projectType: string, details: string) {
+  const text = `${projectType} ${details}`.toLowerCase();
+  if (/bath|shower|tub/.test(text)) return "bathroom";
+  if (/kitchen|cabinet|countertop/.test(text)) return "kitchen";
+  if (/accessib|aging|independence|grab bar|wheelchair/.test(text)) return "accessibility";
+  if (/addition|new room|expand/.test(text)) return "addition";
+  if (/whole.?home|full remodel/.test(text)) return "whole-home";
+  if (/door|window/.test(text)) return "doors-windows";
+  if (/floor|paint/.test(text)) return "flooring-paint";
+  if (/repair|small job|handyman/.test(text)) return "repair-small-job";
+  return "uncategorized";
+}
+
 export async function POST(request: Request) {
   try {
     if (!process.env.BUILDR_LEAD_INGEST_KEY || request.headers.get("x-buildr-lead-key") !== process.env.BUILDR_LEAD_INGEST_KEY) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: cors });
@@ -15,7 +28,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const firstName = String(body.first_name || body.name || "").trim().split(/\s+/)[0];
     if (!firstName) return NextResponse.json({ error: "Name is required" }, { status: 400, headers: cors });
-    const values = { owner_id: ownerId, first_name: firstName, last_name: String(body.last_name || "").trim() || null, email: String(body.email || "").trim() || null, phone: String(body.phone || "").trim() || null, project_type: String(body.project_type || "").trim() || null, message: String(body.message || body.details || "").trim() || null, source: "website" };
+    const projectType = String(body.project_type || "").trim();
+    const message = String(body.message || body.details || "").trim();
+    const values = { owner_id: ownerId, first_name: firstName, last_name: String(body.last_name || "").trim() || null, email: String(body.email || "").trim() || null, phone: String(body.phone || "").trim() || null, project_type: projectType || null, message: message || null, source: "website", category: leadCategory(projectType, message), priority: "normal" };
     const admin = createAdminClient();
     const { data: lead, error } = await admin.from("leads").insert(values).select("id").single();
     if (error || !lead) return NextResponse.json({ error: error?.message || "Could not save lead" }, { status: 500, headers: cors });

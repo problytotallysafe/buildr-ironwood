@@ -8,7 +8,12 @@ function pct(value: number) {
   return `${value.toFixed(1)}%`;
 }
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const query = await searchParams;
   const supabase = await createClient();
 
   const { data: projects } = await supabase
@@ -309,16 +314,35 @@ export default async function AnalyticsPage() {
         1
     ] ?? null;
 
+  const metricViews = {
+    contract: { label: "Contract value", value: (row: (typeof analytics)[number]) => row.contractTotal, format: money },
+    revenue: { label: "Pre-tax customer revenue", value: (row: (typeof analytics)[number]) => row.preTaxRevenue, format: money },
+    payments: { label: "Payments received", value: (row: (typeof analytics)[number]) => row.paid, format: money },
+    outstanding: { label: "Outstanding balance", value: (row: (typeof analytics)[number]) => row.remaining, format: money },
+    "estimated-cost": { label: "Estimated direct cost", value: (row: (typeof analytics)[number]) => row.estimatedBaseCost, format: money },
+    "estimated-profit": { label: "Estimated gross profit", value: (row: (typeof analytics)[number]) => row.estimatedGrossProfit, format: money },
+    "estimated-margin": { label: "Estimated margin", value: (row: (typeof analytics)[number]) => row.estimatedMargin, format: pct },
+    "projected-cost": { label: "Projected direct cost", value: (row: (typeof analytics)[number]) => row.projectedDirectCost, format: money },
+    profit: { label: "Projected gross profit", value: (row: (typeof analytics)[number]) => row.projectedGrossProfit, format: money },
+    margin: { label: "Projected margin", value: (row: (typeof analytics)[number]) => row.projectedMargin, format: pct },
+    "labor-cost": { label: "Actual labor cost", value: (row: (typeof analytics)[number]) => row.actualLaborCost, format: money },
+    labor: { label: "Tracked labor hours", value: (row: (typeof analytics)[number]) => row.actualLaborHours, format: (value: number) => `${value.toFixed(1)} hr` },
+  } as const;
+  const selectedView = query.view && query.view in metricViews
+    ? query.view as keyof typeof metricViews
+    : "profit";
+  const selectedMetric = metricViews[selectedView];
+  const breakdownRows = [...analytics].sort((a, b) => selectedMetric.value(b) - selectedMetric.value(a));
+
   return (
     <div className="page-wrap">
       <PageHeader
         eyebrow="Business intelligence"
         title="Analytics"
-        description="Profitability, labor performance, cash collection, and project trends — separate from the estimating workflow."
       />
 
       <section className="analytics-summary-grid">
-        <article className="panel analytics-stat">
+        <Link href="/analytics?view=contract#analytics-breakdown" className={`panel analytics-stat analytics-stat-link ${selectedView === "contract" ? "active" : ""}`}>
           <span>
             Contract value
           </span>
@@ -327,24 +351,18 @@ export default async function AnalyticsPage() {
               totals.contract,
             )}
           </strong>
-          <small>
-            Total accepted project value
-          </small>
-        </article>
+        </Link>
 
-        <article className="panel analytics-stat">
+        <Link href="/analytics?view=payments#analytics-breakdown" className={`panel analytics-stat analytics-stat-link ${selectedView === "payments" ? "active" : ""}`}>
           <span>
             Payments received
           </span>
           <strong>
             {money(totals.paid)}
           </strong>
-          <small>
-            Cash collected to date
-          </small>
-        </article>
+        </Link>
 
-        <article className="panel analytics-stat">
+        <Link href="/analytics?view=outstanding#analytics-breakdown" className={`panel analytics-stat analytics-stat-link ${selectedView === "outstanding" ? "active" : ""}`}>
           <span>
             Outstanding
           </span>
@@ -353,12 +371,9 @@ export default async function AnalyticsPage() {
               totals.remaining,
             )}
           </strong>
-          <small>
-            Contract balance not yet collected
-          </small>
-        </article>
+        </Link>
 
-        <article className="panel analytics-stat">
+        <Link href="/analytics?view=profit#analytics-breakdown" className={`panel analytics-stat analytics-stat-link ${selectedView === "profit" ? "active" : ""}`}>
           <span>
             Projected gross profit
           </span>
@@ -367,12 +382,9 @@ export default async function AnalyticsPage() {
               totals.projectedProfit,
             )}
           </strong>
-          <small>
-            Uses actual labor where available
-          </small>
-        </article>
+        </Link>
 
-        <article className="panel analytics-stat">
+        <Link href="/analytics?view=margin#analytics-breakdown" className={`panel analytics-stat analytics-stat-link ${selectedView === "margin" ? "active" : ""}`}>
           <span>
             Projected margin
           </span>
@@ -381,12 +393,9 @@ export default async function AnalyticsPage() {
               overallProjectedMargin,
             )}
           </strong>
-          <small>
-            Before overhead, tax and owner compensation
-          </small>
-        </article>
+        </Link>
 
-        <article className="panel analytics-stat">
+        <Link href="/analytics?view=labor#analytics-breakdown" className={`panel analytics-stat analytics-stat-link ${selectedView === "labor" ? "active" : ""}`}>
           <span>
             Tracked labor
           </span>
@@ -396,13 +405,13 @@ export default async function AnalyticsPage() {
             )}{" "}
             hr
           </strong>
-          <small>
+          <small className="analytics-secondary-value">
             {money(
               totals.actualLaborCost,
             )}{" "}
             internal cost
           </small>
-        </article>
+        </Link>
       </section>
 
       <section className="analytics-insight-grid">
@@ -412,7 +421,7 @@ export default async function AnalyticsPage() {
           </h2>
 
           <dl className="analytics-dl">
-            <div>
+            <Link href="/analytics?view=revenue#analytics-breakdown">
               <dt>
                 Pre-tax customer revenue
               </dt>
@@ -421,9 +430,9 @@ export default async function AnalyticsPage() {
                   totals.preTaxRevenue,
                 )}
               </dd>
-            </div>
+            </Link>
 
-            <div>
+            <Link href="/analytics?view=estimated-cost#analytics-breakdown">
               <dt>
                 Estimated direct costs
               </dt>
@@ -432,9 +441,9 @@ export default async function AnalyticsPage() {
                   totals.estimatedBase,
                 )}
               </dd>
-            </div>
+            </Link>
 
-            <div>
+            <Link href="/analytics?view=estimated-profit#analytics-breakdown">
               <dt>
                 Estimated gross profit
               </dt>
@@ -443,9 +452,9 @@ export default async function AnalyticsPage() {
                   totals.estimatedProfit,
                 )}
               </dd>
-            </div>
+            </Link>
 
-            <div>
+            <Link href="/analytics?view=estimated-margin#analytics-breakdown">
               <dt>
                 Estimated margin
               </dt>
@@ -454,7 +463,7 @@ export default async function AnalyticsPage() {
                   overallEstimatedMargin,
                 )}
               </dd>
-            </div>
+            </Link>
           </dl>
         </article>
 
@@ -464,7 +473,7 @@ export default async function AnalyticsPage() {
           </h2>
 
           <dl className="analytics-dl">
-            <div>
+            <Link href="/analytics?view=projected-cost#analytics-breakdown">
               <dt>
                 Projected direct costs
               </dt>
@@ -473,9 +482,9 @@ export default async function AnalyticsPage() {
                   totals.projectedDirect,
                 )}
               </dd>
-            </div>
+            </Link>
 
-            <div>
+            <Link href="/analytics?view=labor-cost#analytics-breakdown">
               <dt>
                 Actual labor cost
               </dt>
@@ -484,9 +493,9 @@ export default async function AnalyticsPage() {
                   totals.actualLaborCost,
                 )}
               </dd>
-            </div>
+            </Link>
 
-            <div>
+            <Link href="/analytics?view=profit#analytics-breakdown">
               <dt>
                 Projected gross profit
               </dt>
@@ -495,9 +504,9 @@ export default async function AnalyticsPage() {
                   totals.projectedProfit,
                 )}
               </dd>
-            </div>
+            </Link>
 
-            <div>
+            <Link href="/analytics?view=margin#analytics-breakdown">
               <dt>
                 Projected margin
               </dt>
@@ -506,7 +515,7 @@ export default async function AnalyticsPage() {
                   overallProjectedMargin,
                 )}
               </dd>
-            </div>
+            </Link>
           </dl>
         </article>
 
@@ -520,19 +529,7 @@ export default async function AnalyticsPage() {
               Strongest projected profit
             </span>
 
-            <strong>
-              {bestProject
-                ? bestProject.title
-                : "—"}
-            </strong>
-
-            <small>
-              {bestProject
-                ? money(
-                    bestProject.projectedGrossProfit,
-                  )
-                : "No project data"}
-            </small>
+            {bestProject ? <Link href={`/projects/${bestProject.id}`}><strong>{bestProject.title}</strong><small>{money(bestProject.projectedGrossProfit)}</small></Link> : <strong>—</strong>}
           </div>
 
           <div className="analytics-signal">
@@ -540,21 +537,22 @@ export default async function AnalyticsPage() {
               Lowest projected profit
             </span>
 
-            <strong>
-              {worstProject
-                ? worstProject.title
-                : "—"}
-            </strong>
-
-            <small>
-              {worstProject
-                ? money(
-                    worstProject.projectedGrossProfit,
-                  )
-                : "No project data"}
-            </small>
+            {worstProject ? <Link href={`/projects/${worstProject.id}`}><strong>{worstProject.title}</strong><small>{money(worstProject.projectedGrossProfit)}</small></Link> : <strong>—</strong>}
           </div>
         </article>
+      </section>
+
+      <section className="panel analytics-breakdown" id="analytics-breakdown">
+        <div className="panel-heading"><div><span className="eyebrow">Breakdown</span><h2>{selectedMetric.label} by project</h2></div><strong>{analytics.length} project{analytics.length === 1 ? "" : "s"}</strong></div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Project</th><th>Customer</th><th>Status</th><th>{selectedMetric.label}</th></tr></thead>
+            <tbody>
+              {breakdownRows.map((row) => <tr key={row.id}><td><Link className="analytics-project-link" href={`/projects/${row.id}`}>{row.title}</Link><small>{row.estimateNumber}</small></td><td>{row.customer || "—"}</td><td className="capitalize">{String(row.status || "").replaceAll("_", " ")}</td><td className={selectedMetric.value(row) < 0 ? "analytics-negative" : ""}><strong>{selectedMetric.format(selectedMetric.value(row))}</strong>{selectedView === "labor" && <small>{money(row.actualLaborCost)} internal cost</small>}</td></tr>)}
+              {!breakdownRows.length && <tr><td colSpan={4} className="empty-cell">No project data yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="panel">
@@ -564,9 +562,6 @@ export default async function AnalyticsPage() {
               Project profitability
             </h2>
 
-            <p>
-              Estimated costs come from the accepted estimate. Projected costs replace estimated labor with actual tracked labor cost.
-            </p>
           </div>
         </div>
 
@@ -697,15 +692,6 @@ export default async function AnalyticsPage() {
         </div>
       </section>
 
-      <section className="panel analytics-note">
-        <h2>
-          How to read this
-        </h2>
-
-        <p>
-          Projected profit currently uses the accepted estimate for materials, subcontractors, allowances, fees and other direct costs, while replacing estimated labor with actual tracked labor cost. Payments received are shown as cash collection only and do not increase profit. When actual expense tracking is added later, Buildr can replace the remaining estimated costs with real job expenses too.
-        </p>
-      </section>
     </div>
   );
 }

@@ -138,7 +138,7 @@ export async function ProjectTodayContent({ embedded = false }: { embedded?: boo
   return <section className={embedded ? "dashboard-today" : undefined}>
     {embedded
       ? <div className="dashboard-today-heading"><div><span>Today in the field</span><h2>Project Today</h2></div><Link href="/today">Open full page <ExternalLink size={15}/></Link></div>
-      : <PageHeader eyebrow={new Date(`${today}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })} title="Project Today" description="One field-ready view of what needs attention now—tasks, deadlines, decisions, payments, and the clock." actions={<Link href="/time" className="button button--gold"><Clock3 size={17}/>{activeTime ? "Clock is running" : "Track time"}</Link>}/>
+      : <PageHeader eyebrow={new Date(`${today}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })} title="Project Today" actions={<Link href="/time" className="button button--gold"><Clock3 size={17}/>{activeTime ? "Clock is running" : "Track time"}</Link>}/>
     }
     {activeTime && <section className="today-clock panel"><Clock3/><div><span>Currently clocked in</span><strong>{(activeTime as any).projects?.name}</strong><small>Started {new Date(activeTime.started_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small></div><Link href="/time" className="button button--outline">Open time clock</Link></section>}
     <div className="today-grid"><div className="stack">
