@@ -307,26 +307,29 @@ export function EstimateBuilder({
   );
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(draftKey);
-      if (saved) {
-        const draft = JSON.parse(saved) as EstimateDraft;
-        if (draft?.savedAt && Array.isArray(draft.sections)) {
-          setPendingDraft(draft);
-          setLastDraftSaved(draft.savedAt);
-          return;
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem(draftKey);
+        if (saved) {
+          const draft = JSON.parse(saved) as EstimateDraft;
+          if (draft?.savedAt && Array.isArray(draft.sections)) {
+            setPendingDraft(draft);
+            setLastDraftSaved(draft.savedAt);
+            return;
+          }
         }
+      } catch {
+        window.localStorage.removeItem(draftKey);
       }
-    } catch {
-      window.localStorage.removeItem(draftKey);
-    }
-    setDraftReady(true);
-    setDraftStatus("saved");
+      setDraftReady(true);
+      setDraftStatus("saved");
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [draftKey]);
 
   useEffect(() => {
     if (!draftReady) return;
-    setDraftStatus("saving");
+    const statusTimer = window.setTimeout(() => setDraftStatus("saving"), 0);
     const timer = window.setTimeout(() => {
       const savedAt = new Date().toISOString();
       const draft: EstimateDraft = {
@@ -337,7 +340,10 @@ export function EstimateBuilder({
       setLastDraftSaved(savedAt);
       setDraftStatus("saved");
     }, 800);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(statusTimer);
+      window.clearTimeout(timer);
+    };
   }, [
     address, customerId, draftKey, draftReady, exclusions, markupRate, notes,
     privateNotes, revisionReason, schedule, scope, sections, milestones, taxRate, title,

@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { TimeTracker } from "@/components/time-tracker";
+import { GpsClockInSettings } from "@/components/gps-clock-in";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function TimePage({
@@ -21,7 +22,7 @@ export default async function TimePage({
     supabase
       .from("projects")
       .select(
-        "id,name,status,estimates(title,estimate_number),customers(first_name,last_name)",
+        "id,name,status,project_address,jobsite_latitude,jobsite_longitude,geofence_radius_meters,gps_clock_in_enabled,estimates(title,estimate_number),customers(first_name,last_name)",
       )
       .order("created_at", {
         ascending: false,
@@ -66,8 +67,9 @@ export default async function TimePage({
       <PageHeader
         eyebrow="Job costing"
         title="Time Tracker"
-        description="Clock in on projects, record helpers, mileage and work categories, then use the real labor data to tighten future estimates."
       />
+
+      <GpsClockInSettings projects={(projects ?? []) as any} />
 
       <TimeTracker
         projects={(projects ?? []) as any}

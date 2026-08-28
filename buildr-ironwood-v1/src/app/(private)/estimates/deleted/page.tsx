@@ -18,7 +18,6 @@ export default async function DeletedEstimatesPage() {
       <PageHeader
         eyebrow="Recoverable estimates"
         title="Trash"
-        description="Restore an old or invalid estimate if you need it again. Accepted estimates cannot be moved here."
         actions={<Link className="button button--outline" href="/estimates">Back to estimates</Link>}
       />
       <section className="panel">

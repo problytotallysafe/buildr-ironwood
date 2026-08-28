@@ -7,10 +7,17 @@ export async function GET(request: NextRequest) {
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   const code = searchParams.get("code");
+  const requestedNext = searchParams.get("next") || "/dashboard";
+  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//")
+    ? requestedNext
+    : "/dashboard";
   const supabase = await createClient();
 
-  if (code) await supabase.auth.exchangeCodeForSession(code);
-  else if (tokenHash && type) await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+  const result = code
+    ? await supabase.auth.exchangeCodeForSession(code)
+    : tokenHash && type
+      ? await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
+      : { error: new Error("Missing authentication code") };
 
-  return NextResponse.redirect(new URL("/dashboard", request.url));
+  return NextResponse.redirect(new URL(result.error ? "/login" : next, request.url));
 }

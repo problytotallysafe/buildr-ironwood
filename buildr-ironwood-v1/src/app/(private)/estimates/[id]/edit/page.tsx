@@ -76,7 +76,6 @@ export default async function EditEstimatePage({
       <PageHeader
         eyebrow={estimate.estimate_number ?? "Edit estimate"}
         title={`Edit ${estimate.title}`}
-        description="Update the scope, pricing, sections, notes, and payment schedule without creating a duplicate estimate."
       />
 
       <EstimateBuilder

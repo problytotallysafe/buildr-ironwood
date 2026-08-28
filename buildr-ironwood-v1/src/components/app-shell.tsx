@@ -20,19 +20,26 @@ import {
   Square,
   Users,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
+import { GpsClockInAgent, type GpsProject } from "./gps-clock-in";
 import { IronwoodLogo } from "./ironwood-logo";
 
-const nav = [
+const nav: Array<{
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  badge?: "leads" | "notifications";
+}> = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/notifications", label: "Notifications", icon: Bell, badge: "notifications" },
   { href: "/today", label: "Project Today", icon: CalendarCheck2 },
   { href: "/intake", label: "New Client Intake", icon: ClipboardList },
   { href: "/customers", label: "Customers", icon: Users },
-  { href: "/leads", label: "Leads", icon: Inbox },
+  { href: "/leads", label: "Leads", icon: Inbox, badge: "leads" },
   { href: "/estimates", label: "Estimates", icon: FileText },
   { href: "/projects", label: "Projects", icon: BriefcaseBusiness },
   { href: "/time", label: "Time Tracker", icon: Clock3 },
@@ -64,17 +71,48 @@ export function AppShell({
   email,
   userId,
   activeTime,
+  newLeadCount,
+  unreadNotificationCount,
+  gpsProjects,
 }: {
   children: React.ReactNode;
   email?: string;
   userId: string;
   activeTime: ActiveTime;
+  newLeadCount: number;
+  unreadNotificationCount: number;
+  gpsProjects: GpsProject[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [clockBusy, setClockBusy] = useState(false);
+  const [badges, setBadges] = useState({
+    leads: newLeadCount,
+    notifications: unreadNotificationCount,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshBadges() {
+      const supabase = createClient();
+      const [{ count: leads }, { count: notifications }] = await Promise.all([
+        supabase.from("leads").select("id", { count: "exact", head: true }).eq("status", "new").is("archived_at", null).is("deleted_at", null),
+        supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null),
+      ]);
+      if (!cancelled) setBadges({ leads: leads ?? 0, notifications: notifications ?? 0 });
+    }
+    void refreshBadges();
+    const timer = window.setInterval(refreshBadges, 30_000);
+    const onVisible = () => { if (document.visibilityState === "visible") void refreshBadges(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeTime) return;
@@ -132,10 +170,12 @@ export function AppShell({
           {nav.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
+            const badgeCount = item.badge === "leads" ? badges.leads : item.badge === "notifications" ? badges.notifications : 0;
             return (
               <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className={active ? "active" : ""}>
                 <Icon size={19} />
-                {item.label}
+                <span>{item.label}</span>
+                {badgeCount > 0 && <b className="nav-badge" aria-label={`${badgeCount} new`}>{badgeCount > 99 ? "99+" : badgeCount}</b>}
               </Link>
             );
           })}
@@ -148,6 +188,7 @@ export function AppShell({
       </aside>
 
       <main className="app-main">
+        <GpsClockInAgent userId={userId} projects={gpsProjects} hasActiveTime={Boolean(activeTime)} />
         {activeTime && (
           <div
             style={{

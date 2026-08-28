@@ -20,5 +20,5 @@ export default async function NewSiteVisitPage({searchParams}:{searchParams:Prom
     const { data } = await client.from("site_visit_worksheets").insert({ owner_id: user.id, ...values, project_id: String(formData.get("project_id") || "") || null, estimate_id: String(formData.get("estimate_id") || "") || null }).select("id").single();
     redirect(data ? `/site-visits/${data.id}/edit` : "/site-visits");
   }
-  return <div className="page-wrap"><PageHeader eyebrow="Field worksheet" title="New site visit" description="Work from the customer’s problem outward: goals first, then measurements, existing conditions, utilities, protection, and follow-up."/><SiteVisitForm action={save} customers={customers ?? []} projects={projects ?? []} estimates={estimates ?? []} defaultCustomerId={query.customer}/></div>;
+  return <div className="page-wrap"><PageHeader eyebrow="Field worksheet" title="New site visit"/><SiteVisitForm action={save} customers={customers ?? []} projects={projects ?? []} estimates={estimates ?? []} defaultCustomerId={query.customer}/></div>;
 }

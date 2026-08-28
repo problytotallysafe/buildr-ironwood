@@ -168,7 +168,7 @@ export function SmartTimeDashboard({
           <span style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", opacity: .72 }}>
             <Clock3 size={15} /> Smart time clock
           </span>
-          <h2 style={{ marginTop: 7 }}>{activeEntry ? "You’re on the clock." : "Start work. Buildr handles the rest."}</h2>
+          <h2 style={{ marginTop: 7 }}>{activeEntry ? "You’re on the clock." : "Time clock"}</h2>
           {activeEntry && <strong style={{ display: "block", marginTop: 8, color: "var(--green)" }}>{activeProject ? projectLabel(activeProject) : "Active project"}</strong>}
         </div>
         <div style={{ textAlign: "right", minWidth: 110 }}>
