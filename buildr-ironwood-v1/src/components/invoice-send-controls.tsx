@@ -26,7 +26,7 @@ export function InvoiceSendControls({ projectId, enabled }: { projectId: string;
     }
   }
 
-  if (!enabled) return <small className="invoice-send-note">Mark this project complete to send its final invoice.</small>;
+  if (!enabled) return <small className="invoice-send-note">Mark this project substantially complete or complete to send its final invoice.</small>;
 
   return <div className="invoice-send-controls">
     <div>

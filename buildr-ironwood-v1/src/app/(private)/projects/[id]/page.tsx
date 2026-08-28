@@ -136,7 +136,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <Plus size={17}/>Add Change Order
         </Link>
         <Link href={`/projects/${project.id}/invoice`} className="button button--outline">
-          <ReceiptText size={17}/>{project.status === "complete" ? "Send Final Invoice" : "Final Invoice"}
+          <ReceiptText size={17}/>{["substantially_complete", "complete"].includes(project.status) ? "Send Final Invoice" : "Final Invoice"}
         </Link>
       </div>
 
@@ -149,7 +149,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       </section>
 
       <section id="status" className="panel project-status-panel project-section-anchor">
-        <div><span className="project-overview-label">Project status</span><h2>Keep the job’s current stage clear</h2><p>Change the status here as the project moves forward. The projects list and dashboard update with it.</p></div>
+        <div><span className="project-overview-label">Project status</span><h2>Keep the job’s current stage clear</h2><p>Construction status and payment status are tracked separately. A completed job with a balance stays in Current projects as Complete — awaiting payment.</p></div>
         <form action={updateProjectStatus} className="project-status-form"><input type="hidden" name="project_id" value={project.id}/><label>Status<select name="status" defaultValue={project.status}><option value="scheduled">Scheduled</option><option value="in_progress">In progress</option><option value="waiting">Waiting</option><option value="on_hold">On hold</option><option value="substantially_complete">Substantially complete</option><option value="complete">Complete</option></select></label><button className="button button--gold">Update status</button></form>
       </section>
 

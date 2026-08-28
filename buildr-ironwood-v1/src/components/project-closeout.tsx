@@ -4,7 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { Check, ClipboardCheck, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-const checklist = [
+const workChecklist = [
   ["final_cleanup_complete", "Final cleanup complete"],
   ["customer_walkthrough_complete", "Customer walkthrough complete"],
   ["keys_access_returned", "Keys, remotes, and access returned"],
@@ -12,8 +12,9 @@ const checklist = [
   ["warranty_information_delivered", "Warranty information delivered"],
   ["subcontractor_documents_complete", "Subcontractor documents / lien waivers complete"],
   ["final_photos_complete", "Final photos complete"],
-  ["final_payment_complete", "Final payment complete"],
 ] as const;
+
+const checklist = [...workChecklist, ["final_payment_complete", "Final payment complete"]] as const;
 
 export function ProjectCloseout({ projectId, initialCloseout, initialItems }: { projectId: string; initialCloseout: any; initialItems: any[] }) {
   const supabase = createClient();
@@ -21,9 +22,10 @@ export function ProjectCloseout({ projectId, initialCloseout, initialItems }: { 
   const [items, setItems] = useState(initialItems);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const completeCount = checklist.filter(([key]) => Boolean(closeout[key])).length;
+  const completeCount = workChecklist.filter(([key]) => Boolean(closeout[key])).length;
   const openPunch = items.filter((item) => item.status !== "complete").length;
-  const readyToClose = completeCount === checklist.length && openPunch === 0;
+  const workComplete = completeCount === workChecklist.length && openPunch === 0;
+  const readyToClose = workComplete && Boolean(closeout.final_payment_complete);
 
   async function saveCloseout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -38,7 +40,7 @@ export function ProjectCloseout({ projectId, initialCloseout, initialItems }: { 
     const { data, error } = await supabase.from("project_closeouts").upsert(values, { onConflict: "project_id" }).select("*").single();
     setBusy(false);
     if (error) setMessage(error.message);
-    else { setCloseout(data); setMessage(readyToClose ? "Closeout saved. This job is ready to be marked complete." : "Closeout saved."); }
+    else { setCloseout(data); setMessage(readyToClose ? "Closeout saved. Work and payment are complete." : workComplete ? "Work is 100% complete. The job will stay current while payment is outstanding." : "Closeout saved."); }
   }
 
   async function addPunch(event: FormEvent<HTMLFormElement>) {
@@ -90,7 +92,7 @@ export function ProjectCloseout({ projectId, initialCloseout, initialItems }: { 
   const orderedItems = useMemo(() => [...items].sort((a, b) => Number(a.status === "complete") - Number(b.status === "complete")), [items]);
 
   return <section id="closeout" className="project-closeout-wrap project-section-anchor">
-    <div className="project-closeout-heading"><div><span className="project-overview-label">Punch list & closeout</span><h2>Finish every detail—and the handoff</h2><p>{openPunch} open punch item{openPunch === 1 ? "" : "s"} · {completeCount} of {checklist.length} closeout steps complete</p></div><div className={readyToClose ? "closeout-readiness closeout-readiness--ready" : "closeout-readiness"}><ClipboardCheck/><strong>{readyToClose ? "Ready to close" : "Closeout in progress"}</strong></div></div>
+    <div className="project-closeout-heading"><div><span className="project-overview-label">Punch list & closeout</span><h2>Finish every detail—and the handoff</h2><p>{openPunch} open punch item{openPunch === 1 ? "" : "s"} · {completeCount} of {workChecklist.length} work steps complete</p></div><div className={workComplete ? "closeout-readiness closeout-readiness--ready" : "closeout-readiness"}><ClipboardCheck/><strong>{readyToClose ? "Work complete · Paid" : workComplete ? "100% complete · Awaiting payment" : "Closeout in progress"}</strong></div></div>
 
     <div className="closeout-grid">
       <div className="stack">
@@ -100,7 +102,7 @@ export function ProjectCloseout({ projectId, initialCloseout, initialItems }: { 
         </section>
       </div>
 
-      <form onSubmit={saveCloseout} className="panel closeout-checklist"><h2>Final handoff checklist</h2><div className="closeout-progress"><span style={{ width: `${completeCount / checklist.length * 100}%` }}/></div>{checklist.map(([key, label]) => <label className="closeout-check" key={key}><input type="checkbox" name={key} checked={Boolean(closeout[key])} onChange={(event) => setCloseout((current: any) => ({ ...current, [key]: event.target.checked }))}/><span>{label}</span></label>)}<label>Walkthrough date<input type="date" name="walkthrough_date" defaultValue={closeout.walkthrough_date || ""}/></label><label>Customer walkthrough notes<textarea name="customer_notes" rows={3} defaultValue={closeout.customer_notes || ""}/></label><label>Warranty / care notes<textarea name="warranty_notes" rows={3} defaultValue={closeout.warranty_notes || ""}/></label><label>Private Ironwood closeout notes<textarea name="internal_notes" rows={3} defaultValue={closeout.internal_notes || ""}/></label><button className="button button--gold button--block" disabled={busy}><Save size={16}/>{busy ? "Saving…" : "Save closeout"}</button>{message && <p className="form-message">{message}</p>}</form>
+      <form onSubmit={saveCloseout} className="panel closeout-checklist"><h2>Final handoff checklist</h2><div className="closeout-progress"><span style={{ width: `${completeCount / workChecklist.length * 100}%` }}/></div>{workChecklist.map(([key, label]) => <label className="closeout-check" key={key}><input type="checkbox" name={key} checked={Boolean(closeout[key])} onChange={(event) => setCloseout((current: any) => ({ ...current, [key]: event.target.checked }))}/><span>{label}</span></label>)}<div className="closeout-payment-step"><strong>Payment & archive</strong><p>Work can reach 100% before the final payment arrives. Keep this unchecked until the balance is actually received.</p><label className="closeout-check"><input type="checkbox" name="final_payment_complete" checked={Boolean(closeout.final_payment_complete)} onChange={(event) => setCloseout((current: any) => ({ ...current, final_payment_complete: event.target.checked }))}/><span>Final payment complete</span></label></div><label>Walkthrough date<input type="date" name="walkthrough_date" defaultValue={closeout.walkthrough_date || ""}/></label><label>Customer walkthrough notes<textarea name="customer_notes" rows={3} defaultValue={closeout.customer_notes || ""}/></label><label>Warranty / care notes<textarea name="warranty_notes" rows={3} defaultValue={closeout.warranty_notes || ""}/></label><label>Private Ironwood closeout notes<textarea name="internal_notes" rows={3} defaultValue={closeout.internal_notes || ""}/></label><button className="button button--gold button--block" disabled={busy}><Save size={16}/>{busy ? "Saving…" : "Save closeout"}</button>{message && <p className="form-message">{message}</p>}</form>
     </div>
   </section>;
 }

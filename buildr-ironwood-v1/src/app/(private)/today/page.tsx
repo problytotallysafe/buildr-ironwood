@@ -58,7 +58,7 @@ export async function ProjectTodayContent({ embedded = false }: { embedded?: boo
 
   const completedIds = (completedProjects ?? []).map((project: any) => project.id);
   const [{ data: completedChangeOrders }, { data: completedPayments }] = completedIds.length ? await Promise.all([
-    supabase.from("change_orders").select("project_id,total,status").in("project_id", completedIds).neq("status", "declined"),
+    supabase.from("change_orders").select("project_id,total,status").in("project_id", completedIds).eq("status", "accepted"),
     supabase.from("payments").select("project_id,amount").in("project_id", completedIds),
   ]) : [{ data: [] }, { data: [] }];
 

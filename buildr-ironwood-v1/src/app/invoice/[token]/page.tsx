@@ -12,9 +12,9 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   const { data: estimate } = await supabase.from("estimates").select("id,estimate_number,title,total,scope,project_address,customers(first_name,last_name,email,phone,address_line1,address_line2,city,state,postal_code)").eq("public_token", token).single();
   if (!estimate) notFound();
   const { data: project } = await supabase.from("projects").select("id,name,status,contract_total,project_address").eq("estimate_id", estimate.id).single();
-  if (!project || project.status !== "complete") notFound();
+  if (!project || !["substantially_complete", "complete"].includes(project.status)) notFound();
   const [{ data: changeOrders }, { data: payments }, { data: settings }] = await Promise.all([
-    supabase.from("change_orders").select("id,change_order_number,title,status,total,scope_changes,created_at").eq("project_id", project.id).neq("status", "declined").order("created_at"),
+    supabase.from("change_orders").select("id,change_order_number,title,status,total,scope_changes,created_at").eq("project_id", project.id).eq("status", "accepted").order("created_at"),
     supabase.from("payments").select("amount").eq("project_id", project.id),
     supabase.from("business_settings").select("business_name,phone,email,website,address,license_number").maybeSingle(),
   ]);

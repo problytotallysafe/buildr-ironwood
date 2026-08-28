@@ -12,7 +12,7 @@ export default async function FinalInvoicePage({ params }: { params: Promise<{ i
   const supabase = await createClient();
   const [{ data: project }, { data: changeOrders }, { data: payments }, { data: settings }] = await Promise.all([
     supabase.from("projects").select("*,customers(*),estimates(id,estimate_number,title,total,scope,project_address)").eq("id", id).single(),
-    supabase.from("change_orders").select("id,change_order_number,title,status,total,scope_changes,created_at").eq("project_id", id).neq("status", "declined").order("created_at"),
+    supabase.from("change_orders").select("id,change_order_number,title,status,total,scope_changes,created_at").eq("project_id", id).eq("status", "accepted").order("created_at"),
     supabase.from("payments").select("amount").eq("project_id", id),
     supabase.from("business_settings").select("business_name,phone,email,website,address,license_number").maybeSingle(),
   ]);
@@ -27,7 +27,7 @@ export default async function FinalInvoicePage({ params }: { params: Promise<{ i
   const customerAddress = [customer?.address_line1, customer?.address_line2, customer?.city, customer?.state, customer?.postal_code].filter(Boolean).join(", ");
 
   return <div className="invoice-screen">
-    <div className="invoice-toolbar no-print"><Link href={`/projects/${id}`}><ArrowLeft size={16}/>Back to project</Link><div className="invoice-toolbar-actions"><InvoiceSendControls projectId={id} enabled={project.status === "complete"}/><PrintInvoiceButton/></div></div>
+    <div className="invoice-toolbar no-print"><Link href={`/projects/${id}`}><ArrowLeft size={16}/>Back to project</Link><div className="invoice-toolbar-actions"><InvoiceSendControls projectId={id} enabled={["substantially_complete", "complete"].includes(project.status)}/><PrintInvoiceButton/></div></div>
     <article className="invoice-sheet">
       <header className="invoice-header"><div><IronwoodLogo/><p>{settings?.address}</p><p>{[settings?.phone, settings?.email].filter(Boolean).join(" · ")}</p></div><div><span>FINAL INVOICE</span><h1>{estimate?.estimate_number || "Project invoice"}</h1><p>{new Date().toLocaleDateString()}</p></div></header>
       <section className="invoice-parties"><div><span>Bill to</span><strong>{customer?.first_name} {customer?.last_name}</strong><p>{customerAddress}</p><p>{[customer?.phone, customer?.email].filter(Boolean).join(" · ")}</p></div><div><span>Project</span><strong>{estimate?.title || project.name}</strong><p>{estimate?.project_address || project.project_address}</p></div></section>

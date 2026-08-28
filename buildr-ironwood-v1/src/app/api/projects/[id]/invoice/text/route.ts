@@ -17,11 +17,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const [{ data: project }, { data: changeOrders }, { data: payments }] = await Promise.all([
       supabase.from("projects").select("id,name,status,contract_total,customers(first_name,last_name,phone),estimates(id,estimate_number,title,total,public_token)").eq("id", id).single(),
-      supabase.from("change_orders").select("total").eq("project_id", id).neq("status", "declined"),
+      supabase.from("change_orders").select("total").eq("project_id", id).eq("status", "accepted"),
       supabase.from("payments").select("amount").eq("project_id", id),
     ]);
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
-    if (project.status !== "complete") return NextResponse.json({ error: "Mark the project complete before sending its final invoice." }, { status: 400 });
+    if (!["substantially_complete", "complete"].includes(project.status)) return NextResponse.json({ error: "Mark the project substantially complete or complete before sending its final invoice." }, { status: 400 });
     const customer = Array.isArray(project.customers) ? project.customers[0] : project.customers;
     const estimate = Array.isArray(project.estimates) ? project.estimates[0] : project.estimates;
     if (!estimate?.public_token) return NextResponse.json({ error: "This project does not have a shareable accepted estimate." }, { status: 400 });
