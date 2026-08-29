@@ -7,6 +7,7 @@ import { money } from "@/lib/money";
 import { ACTIVE_PROJECT_STATUSES } from "@/lib/projects";
 import { StatusPill } from "@/components/status-pill";
 import { ProjectTodayContent } from "@/app/(private)/today/page";
+import { getBusinessAccess } from "@/lib/business-access";
 
 const DAILY_QUOTES = [
   "Craftsmanship is care made visible.",
@@ -46,11 +47,12 @@ function quoteForToday() {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  const access = await getBusinessAccess(supabase);
   const since = new Date();
   since.setDate(since.getDate() - 8);
   since.setHours(0, 0, 0, 0);
 
-  const [customers, openEstimates, projects, payments, recent, activeProjects, recentTime, activeOwnerTime] = await Promise.all([
+  const [customers, openEstimates, projects, payments, recent, activeProjects, recentTime, activeOwnerTime, businessSettings] = await Promise.all([
     supabase.from("customers").select("id", { count: "exact", head: true }),
     supabase.from("estimates").select("id,total,status", { count: "exact" }).in("status", ["draft", "sent", "viewed"]),
     supabase.from("projects").select("id", { count: "exact", head: true }).in("status", [...ACTIVE_PROJECT_STATUSES]),
@@ -75,6 +77,13 @@ export default async function DashboardPage() {
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    access
+      ? supabase
+          .from("business_settings")
+          .select("owner_hourly_cost")
+          .eq("owner_id", access.ownerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null } as any),
   ]);
 
   const pipeline = (openEstimates.data ?? []).reduce((sum, row) => sum + Number(row.total), 0);
@@ -90,10 +99,13 @@ export default async function DashboardPage() {
 
       <ProjectTodayContent embedded />
 
-      <SmartTimeDashboard
-        projects={(activeProjects.data ?? []) as any}
-        entries={timeEntries as any}
-      />
+      {access?.role === "owner" && (
+        <SmartTimeDashboard
+          projects={(activeProjects.data ?? []) as any}
+          entries={timeEntries as any}
+          ownerHourlyCost={Number(businessSettings.data?.owner_hourly_cost ?? 0)}
+        />
+      )}
 
       <section className="metric-grid">
         <Link className="metric metric--link" href="/customers"><Users /><span>Customers</span><strong>{customers.count ?? 0}</strong><small>View customers <ArrowRight size={13}/></small></Link>

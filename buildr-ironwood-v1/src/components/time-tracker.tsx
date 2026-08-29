@@ -1,10 +1,17 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Clock3, Pencil, Play, Plus, Square, Trash2, X } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import {
+  businessDateInputValue,
+  formatBusinessDate,
+  formatBusinessTime,
+} from "@/lib/date";
+import { effectiveHourlyCost } from "@/lib/labor-cost";
 
 type ProjectOption = {
   id: string;
@@ -122,19 +129,37 @@ export function TimeTracker({
   teamMembers,
   entries,
   selectedProject,
+  ownerHourlyCost,
+  canTrackOwner,
+  canManageWorkers,
 }: {
   projects: ProjectOption[];
   teamMembers: TeamMember[];
   entries: TimeEntry[];
   selectedProject?: string;
+  ownerHourlyCost: number;
+  canTrackOwner: boolean;
+  canManageWorkers: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
 
+  const firstWorkerId = teamMembers.find((member) => member.active)?.id ?? "";
+  const firstRunningEntry = entries.find((entry) => !entry.ended_at) ?? null;
+  const initialWorkerType = canTrackOwner
+    ? firstRunningEntry?.team_member_id ?? "owner"
+    : firstWorkerId;
+
+  const [workerType, setWorkerType] =
+    useState(initialWorkerType);
+
   const activeEntry =
-    entries.find(
-      (entry) => !entry.ended_at,
-    ) ?? null;
+    entries.find((entry) => {
+      if (entry.ended_at) return false;
+      return workerType === "owner"
+        ? canTrackOwner && entry.team_member_id == null
+        : entry.team_member_id === workerType;
+    }) ?? null;
 
   const [projectId, setProjectId] =
     useState(
@@ -142,12 +167,6 @@ export function TimeTracker({
         selectedProject ??
         projects[0]?.id ??
         "",
-    );
-
-  const [workerType, setWorkerType] =
-    useState(
-      activeEntry?.team_member_id ??
-        "owner",
     );
 
   const [category, setCategory] =
@@ -177,7 +196,7 @@ export function TimeTracker({
   const [
     manualWorkerType,
     setManualWorkerType,
-  ] = useState("owner");
+  ] = useState(initialWorkerType);
 
   const [
     manualCategory,
@@ -188,9 +207,7 @@ export function TimeTracker({
     manualDate,
     setManualDate,
   ] = useState(
-    new Date()
-      .toISOString()
-      .slice(0, 10),
+    businessDateInputValue(),
   );
 
   const [
@@ -273,9 +290,7 @@ export function TimeTracker({
 
       laborCost +=
         (mins / 60) *
-        Number(
-          entry.hourly_cost ?? 0,
-        );
+        effectiveHourlyCost(entry, ownerHourlyCost);
 
       miles += Number(
         entry.mileage ?? 0,
@@ -287,7 +302,7 @@ export function TimeTracker({
       laborCost,
       miles,
     };
-  }, [entries]);
+  }, [entries, ownerHourlyCost]);
 
   function workerDetails(
     value: string,
@@ -296,7 +311,7 @@ export function TimeTracker({
       return {
         team_member_id: null,
         worker_name: "Owner",
-        hourly_cost: 0,
+        hourly_cost: ownerHourlyCost,
       };
     }
 
@@ -330,6 +345,11 @@ export function TimeTracker({
         "Choose a project first.",
       );
 
+      return;
+    }
+
+    if (!workerType) {
+      setError("Choose a worker first.");
       return;
     }
 
@@ -492,6 +512,11 @@ export function TimeTracker({
       return;
     }
 
+    if (!manualWorkerType) {
+      setError("Choose a worker.");
+      return;
+    }
+
     if (manualHours <= 0) {
       setError(
         "Hours must be greater than zero.",
@@ -538,9 +563,6 @@ export function TimeTracker({
         );
 
       const entryValues = {
-            owner_id:
-              user.id,
-
             project_id:
               manualProjectId,
 
@@ -581,7 +603,7 @@ export function TimeTracker({
 
       const { error: insertError } = editingEntryId
         ? await supabase.from("time_entries").update(entryValues).eq("id", editingEntryId)
-        : await supabase.from("time_entries").insert(entryValues);
+        : await supabase.from("time_entries").insert({ owner_id: user.id, ...entryValues });
 
       if (insertError) {
         setError(
@@ -634,9 +656,6 @@ export function TimeTracker({
       }
 
       const memberValues = {
-            owner_id:
-              user.id,
-
             name:
               newMemberName.trim(),
 
@@ -650,7 +669,7 @@ export function TimeTracker({
 
       const { error: insertError } = editingMemberId
         ? await supabase.from("team_members").update(memberValues).eq("id", editingMemberId)
-        : await supabase.from("team_members").insert(memberValues);
+        : await supabase.from("team_members").insert({ owner_id: user.id, ...memberValues });
 
       if (insertError) {
         setError(
@@ -714,7 +733,7 @@ export function TimeTracker({
     setManualProjectId(entry.project_id);
     setManualWorkerType(entry.team_member_id ?? "owner");
     setManualCategory(entry.work_category);
-    setManualDate(start.toISOString().slice(0, 10));
+    setManualDate(businessDateInputValue(start));
     setManualStart(start.toTimeString().slice(0, 5));
     setManualHours(durationMinutes(entry) / 60);
     setManualNotes(entry.notes ?? "");
@@ -771,6 +790,13 @@ export function TimeTracker({
         </article>
       </section>
 
+      {ownerHourlyCost <= 0 && canManageWorkers && (
+        <div className="settings-warning">
+          <div><strong>Owner labor cost is not set.</strong><span>Hours are recorded, but owner labor totals and profit reports cannot be fully accurate.</span></div>
+          <Link href="/settings/time">Set owner hourly cost</Link>
+        </div>
+      )}
+
       <section className="panel">
         <div className="panel-heading">
           <div>
@@ -804,15 +830,7 @@ export function TimeTracker({
                   activeEntry.work_category
                 }{" "}
                 • Started{" "}
-                {new Date(
-                  activeEntry.started_at,
-                ).toLocaleTimeString(
-                  [],
-                  {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  },
-                )}
+                {formatBusinessTime(activeEntry.started_at)}
               </p>
             </div>
 
@@ -875,9 +893,8 @@ export function TimeTracker({
                   )
                 }
               >
-                <option value="owner">
-                  Owner
-                </option>
+                {!canTrackOwner && <option value="">Choose worker…</option>}
+                {canTrackOwner && <option value="owner">Owner</option>}
 
                 {teamMembers
                   .filter(
@@ -988,7 +1005,8 @@ export function TimeTracker({
                 type="button"
                 disabled={
                   busy ||
-                  !projectId
+                  !projectId ||
+                  !workerType
                 }
                 onClick={clockIn}
               >
@@ -1082,9 +1100,8 @@ export function TimeTracker({
                 )
               }
             >
-              <option value="owner">
-                Owner
-              </option>
+              {!canTrackOwner && <option value="">Choose worker…</option>}
+              {canTrackOwner && <option value="owner">Owner</option>}
 
               {teamMembers
                 .filter(
@@ -1259,7 +1276,7 @@ export function TimeTracker({
             <button
               className="button button--outline"
               type="submit"
-              disabled={busy || !manualProjectId}
+              disabled={busy || !manualProjectId || !manualWorkerType}
             >
               <Plus size={17} />
               {editingEntryId ? "Save time changes" : "Add time"}
@@ -1269,7 +1286,7 @@ export function TimeTracker({
         </form>
       </section>
 
-      <section className="panel">
+      {canManageWorkers && <section className="panel">
         <div className="panel-heading">
           <div>
             <h2>
@@ -1362,7 +1379,7 @@ export function TimeTracker({
           </div>
         </form>
         {teamMembers.length>0&&<div className="record-list compact-record-list">{teamMembers.map(member=><button type="button" key={member.id} onClick={()=>editMember(member)}><span><strong>{member.name}</strong><small>{member.role||"Helper"} • {formatMoney(Number(member.hourly_cost))}/hr</small></span><Pencil size={15}/></button>)}</div>}
-      </section>
+      </section>}
 
       <section className="panel">
         <div className="panel-heading">
@@ -1414,9 +1431,7 @@ export function TimeTracker({
                       }
                     >
                       <td>
-                        {new Date(
-                          entry.started_at,
-                        ).toLocaleDateString()}
+                        {formatBusinessDate(entry.started_at)}
 
                         {entry.manual_entry && (
                           <small>
@@ -1462,10 +1477,7 @@ export function TimeTracker({
                           ? formatMoney(
                               (minutes /
                                 60) *
-                                Number(
-                                  entry.hourly_cost ??
-                                    0,
-                                ),
+                                effectiveHourlyCost(entry, ownerHourlyCost),
                             )
                           : "—"}
                       </td>
@@ -1474,7 +1486,7 @@ export function TimeTracker({
                         <div className="button-row"><button
                           type="button"
                           className="icon-button"
-                          disabled={busy || !entry.ended_at}
+                          disabled={busy || !entry.ended_at || (!canTrackOwner && entry.team_member_id == null)}
                           onClick={() => editEntry(entry)}
                           aria-label="Edit time entry"
                         ><Pencil size={16}/></button><button
@@ -1482,7 +1494,8 @@ export function TimeTracker({
                           className="icon-button danger"
                           disabled={
                             busy ||
-                            !entry.ended_at
+                            !entry.ended_at ||
+                            (!canTrackOwner && entry.team_member_id == null)
                           }
                           onClick={() =>
                             deleteEntry(

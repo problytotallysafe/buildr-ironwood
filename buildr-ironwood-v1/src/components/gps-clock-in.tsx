@@ -40,11 +40,13 @@ function locate(options?: PositionOptions) {
 }
 
 export function GpsClockInAgent({
-  userId,
+  ownerId,
+  ownerHourlyCost,
   projects,
   hasActiveTime,
 }: {
-  userId: string;
+  ownerId: string;
+  ownerHourlyCost: number;
   projects: GpsProject[];
   hasActiveTime: boolean;
 }) {
@@ -138,7 +140,7 @@ export function GpsClockInAgent({
           const { count } = await supabase
             .from("time_entries")
             .select("id", { count: "exact", head: true })
-            .eq("owner_id", userId)
+            .eq("owner_id", ownerId)
             .is("team_member_id", null)
             .is("ended_at", null);
           if (count) {
@@ -148,7 +150,7 @@ export function GpsClockInAgent({
           }
 
           const { error } = await supabase.from("time_entries").insert({
-            owner_id: userId,
+            owner_id: ownerId,
             project_id: match.project.id,
             team_member_id: null,
             worker_name: "Owner",
@@ -157,7 +159,7 @@ export function GpsClockInAgent({
             mileage: 0,
             billable: true,
             manual_entry: false,
-            hourly_cost: 0,
+            hourly_cost: ownerHourlyCost,
             clock_in_method: "gps",
             clock_in_latitude: confirmation.coords.latitude,
             clock_in_longitude: confirmation.coords.longitude,
@@ -190,14 +192,14 @@ export function GpsClockInAgent({
       if (watchId != null) navigator.geolocation.clearWatch(watchId);
       clearPending();
     };
-  }, [enabled, hasActiveTime, projects, router, userId]);
+  }, [enabled, hasActiveTime, ownerHourlyCost, ownerId, projects, router]);
 
   if (!enabled || hasActiveTime || !projects.length) return null;
   return <div className="gps-agent-bar"><Navigation size={15} /><span>{status}</span><LinkToTime /></div>;
 }
 
 function LinkToTime() {
-  return <a href="/time#gps-clock-in">GPS settings</a>;
+  return <a href="/settings/time#gps-clock-in">GPS settings</a>;
 }
 
 export function GpsClockInSettings({ projects }: { projects: GpsProject[] }) {

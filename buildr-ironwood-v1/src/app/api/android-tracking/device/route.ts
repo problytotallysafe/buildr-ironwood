@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { hashDeviceSecret } from "@/lib/owntracks";
+import { getBusinessAccess } from "@/lib/business-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,10 +15,10 @@ function sameOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin;
 }
 
-async function signedInUser() {
+async function signedInOwner() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+  const access = await getBusinessAccess(supabase);
+  return access?.role === "owner" ? access : null;
 }
 
 function deviceResponse(device: Record<string, unknown> | null) {
@@ -32,13 +33,13 @@ function deviceResponse(device: Record<string, unknown> | null) {
 }
 
 export async function GET() {
-  const user = await signedInUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const access = await signedInOwner();
+  if (!access) return NextResponse.json({ error: "Owner access required" }, { status: 403 });
 
   const { data, error } = await createAdminClient()
     .from("android_tracking_devices")
     .select("label,username,active,last_seen_at,created_at")
-    .eq("owner_id", user.id)
+    .eq("owner_id", access.ownerId)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -52,8 +53,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
 
-  const user = await signedInUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const access = await signedInOwner();
+  if (!access) return NextResponse.json({ error: "Owner access required" }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
   const label = typeof body.label === "string" && body.label.trim()
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
   const { data, error } = await admin
     .from("android_tracking_devices")
     .upsert({
-      owner_id: user.id,
+      owner_id: access.ownerId,
       label,
       username,
       secret_hash: hashDeviceSecret(password),
@@ -95,13 +96,13 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
 
-  const user = await signedInUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const access = await signedInOwner();
+  if (!access) return NextResponse.json({ error: "Owner access required" }, { status: 403 });
 
   const { error } = await createAdminClient()
     .from("android_tracking_devices")
     .update({ active: false, updated_at: new Date().toISOString() })
-    .eq("owner_id", user.id);
+    .eq("owner_id", access.ownerId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

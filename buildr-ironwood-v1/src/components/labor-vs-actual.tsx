@@ -1,5 +1,9 @@
 "use client";
 
+import Link from "next/link";
+
+import { effectiveHourlyCost, ownerCostIsMissing } from "@/lib/labor-cost";
+
 type LaborEstimateItem = {
   id: string;
   description: string;
@@ -12,6 +16,7 @@ type LaborEstimateItem = {
 
 type TimeEntry = {
   id: string;
+  team_member_id: string | null;
   work_category: string;
   duration_minutes: number | null;
   ended_at: string | null;
@@ -25,9 +30,11 @@ const isHourly = (u:string|null) => ["hr","hrs","hour","hours","labor hour","lab
 export function LaborVsActual({
   laborItems,
   timeEntries,
+  ownerHourlyCost,
 }: {
   laborItems: LaborEstimateItem[];
   timeEntries: TimeEntry[];
+  ownerHourlyCost: number;
 }) {
   const estimatedBase = laborItems.reduce((s,i)=>s+Number(i.quantity||0)*Number(i.unit_cost||0),0);
   const estimatedCustomer = laborItems.reduce((s,i)=>{
@@ -39,8 +46,9 @@ export function LaborVsActual({
   const completed = timeEntries.filter(e=>e.ended_at && e.duration_minutes != null);
   const actualMinutes = completed.reduce((s,e)=>s+Number(e.duration_minutes||0),0);
   const actualHours = actualMinutes/60;
-  const actualCost = completed.reduce((s,e)=>s+(Number(e.duration_minutes||0)/60)*Number(e.hourly_cost||0),0);
-  const costVariance = actualCost-estimatedBase;
+  const actualCost = completed.reduce((s,e)=>s+(Number(e.duration_minutes||0)/60)*effectiveHourlyCost(e,ownerHourlyCost),0);
+  const incompleteOwnerCost = completed.some((entry)=>ownerCostIsMissing(entry,ownerHourlyCost));
+  const costVariance = incompleteOwnerCost ? null : actualCost-estimatedBase;
   const hoursVariance = estimatedHours>0 ? actualHours-estimatedHours : null;
 
   const categories = Object.values(completed.reduce((acc,e)=>{
@@ -48,7 +56,7 @@ export function LaborVsActual({
     if(!acc[key]) acc[key]={category:key,minutes:0,cost:0};
     const mins=Number(e.duration_minutes||0);
     acc[key].minutes+=mins;
-    acc[key].cost+=(mins/60)*Number(e.hourly_cost||0);
+    acc[key].cost+=(mins/60)*effectiveHourlyCost(e,ownerHourlyCost);
     return acc;
   },{} as Record<string,{category:string;minutes:number;cost:number}>)).sort((a,b)=>b.minutes-a.minutes);
 
@@ -60,6 +68,13 @@ export function LaborVsActual({
           <p>Compare the accepted estimate against real time recorded on this project.</p>
         </div>
       </div>
+
+      {incompleteOwnerCost && (
+        <div className="settings-warning">
+          <div><strong>Owner labor cost is not set.</strong><span>Actual cost below is incomplete until the internal owner rate is added.</span></div>
+          <Link href="/settings/time">Set rate</Link>
+        </div>
+      )}
 
       <div className="labor-summary-grid">
         <article className="labor-stat">
@@ -76,10 +91,10 @@ export function LaborVsActual({
 
         <article className="labor-stat">
           <span>Cost variance</span>
-          <strong className={costVariance>0?"labor-bad":costVariance<0?"labor-good":""}>
-            {costVariance>0?"+":""}{money(costVariance)}
+          <strong className={costVariance==null?"":costVariance>0?"labor-bad":costVariance<0?"labor-good":""}>
+            {costVariance==null?"—":`${costVariance>0?"+":""}${money(costVariance)}`}
           </strong>
-          <small>{costVariance>0?"Over estimate":costVariance<0?"Under estimate":"On target"}</small>
+          <small>{costVariance==null?"Set the owner rate to compare":costVariance>0?"Over estimate":costVariance<0?"Under estimate":"On target"}</small>
         </article>
 
         <article className="labor-stat">

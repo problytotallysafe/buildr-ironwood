@@ -56,9 +56,11 @@ function previousWorkday(now: Date) {
 export function SmartTimeDashboard({
   projects,
   entries,
+  ownerHourlyCost,
 }: {
   projects: ProjectOption[];
   entries: TimeEntry[];
+  ownerHourlyCost: number;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -128,7 +130,7 @@ export function SmartTimeDashboard({
         mileage: 0,
         billable: true,
         manual_entry: false,
-        hourly_cost: 0,
+        hourly_cost: ownerHourlyCost,
       });
       if (insertError) throw insertError;
       window.localStorage.setItem("buildr-last-project", projectId);

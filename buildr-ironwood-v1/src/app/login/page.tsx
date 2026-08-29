@@ -1,18 +1,23 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient, createPasswordRecoveryClient } from "@/lib/supabase/client";
 import { IronwoodLogo } from "@/components/ironwood-logo";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const accessMessage = searchParams.get("status") === "no-access"
+    ? "This login does not currently have access to the Ironwood workspace. Ask the owner to add or restore it in Settings."
+    : "";
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -52,10 +57,18 @@ export default function LoginPage() {
           <label>Password<div className="password-field"><input type={showPassword ? "text" : "password"} required minLength={8} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
           <button className="button button--gold" disabled={busy}><KeyRound size={17} />{busy ? "Signing in…" : "Sign in"}</button>
           <button className="login-reset-link" type="button" disabled={busy} onClick={resetPassword}>Set or reset password</button>
-          {message && <p className="form-message">{message}</p>}
+          {(message || accessMessage) && <p className="form-message">{message || accessMessage}</p>}
         </form>
       </section>
       <aside className="login-art"><div><span>Built on quality.</span><h2>Rooted in trust.</h2></div></aside>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="login-page"><section className="login-panel"><IronwoodLogo /><p className="form-message">Loading sign in…</p></section><aside className="login-art" /></main>}>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -29,26 +29,48 @@ import { createClient } from "@/lib/supabase/client";
 import { GpsClockInAgent, type GpsProject } from "./gps-clock-in";
 import { IronwoodLogo } from "./ironwood-logo";
 
-const nav: Array<{
+type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
   badge?: "leads" | "notifications";
-}> = [
-  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/today", label: "Project Today", icon: CalendarCheck2 },
-  { href: "/intake", label: "New Client Intake", icon: ClipboardList },
-  { href: "/leads", label: "Leads", icon: Inbox, badge: "leads" },
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/site-visits", label: "Site Visits", icon: MapPin },
-  { href: "/estimates", label: "Estimates", icon: FileText },
-  { href: "/projects", label: "Projects", icon: BriefcaseBusiness },
-  { href: "/time", label: "Time Tracker", icon: Clock3 },
-  { href: "/payments", label: "Payments", icon: CreditCard },
-  { href: "/analytics", label: "Analytics", icon: LineChart },
-  { href: "/catalog", label: "Price Book", icon: BookOpen },
-  { href: "/notifications", label: "Notifications", icon: Bell, badge: "notifications" },
-  { href: "/settings", label: "Settings", icon: Settings },
+};
+
+const navGroups: Array<{ label: string; items: NavItem[] }> = [
+  {
+    label: "Daily",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+      { href: "/today", label: "Project Today", icon: CalendarCheck2 },
+    ],
+  },
+  {
+    label: "Sales",
+    items: [
+      { href: "/intake", label: "New Client Intake", icon: ClipboardList },
+      { href: "/leads", label: "Leads", icon: Inbox, badge: "leads" },
+      { href: "/customers", label: "Customers", icon: Users },
+      { href: "/site-visits", label: "Site Visits", icon: MapPin },
+      { href: "/estimates", label: "Estimates", icon: FileText },
+    ],
+  },
+  {
+    label: "Jobs",
+    items: [
+      { href: "/projects", label: "Projects", icon: BriefcaseBusiness },
+      { href: "/time", label: "Time Tracker", icon: Clock3 },
+      { href: "/payments", label: "Payments", icon: CreditCard },
+    ],
+  },
+  {
+    label: "Business",
+    items: [
+      { href: "/analytics", label: "Analytics", icon: LineChart },
+      { href: "/catalog", label: "Price Book", icon: BookOpen },
+      { href: "/notifications", label: "Notifications", icon: Bell, badge: "notifications" },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 type ActiveTime = {
@@ -71,7 +93,8 @@ function elapsedText(startedAt: string, now: number) {
 export function AppShell({
   children,
   email,
-  userId,
+  businessOwnerId,
+  ownerHourlyCost,
   activeTime,
   newLeadCount,
   unreadNotificationCount,
@@ -79,7 +102,8 @@ export function AppShell({
 }: {
   children: React.ReactNode;
   email?: string;
-  userId: string;
+  businessOwnerId: string;
+  ownerHourlyCost: number;
   activeTime: ActiveTime;
   newLeadCount: number;
   unreadNotificationCount: number;
@@ -142,7 +166,7 @@ export function AppShell({
           updated_at: endedAt.toISOString(),
         })
         .eq("id", activeTime.id)
-        .eq("owner_id", userId);
+        .eq("owner_id", businessOwnerId);
       if (error) throw error;
       router.refresh();
     } catch (error) {
@@ -169,18 +193,23 @@ export function AppShell({
         </div>
 
         <nav className="side-nav">
-          {nav.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const Icon = item.icon;
-            const badgeCount = item.badge === "leads" ? badges.leads : item.badge === "notifications" ? badges.notifications : 0;
-            return (
-              <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className={active ? "active" : ""}>
-                <Icon size={19} />
-                <span>{item.label}</span>
-                {badgeCount > 0 && <b className="nav-badge" aria-label={`${badgeCount} new`}>{badgeCount > 99 ? "99+" : badgeCount}</b>}
-              </Link>
-            );
-          })}
+          {navGroups.map((group) => (
+            <div className="side-nav-group" key={group.label}>
+              <span className="side-nav-label">{group.label}</span>
+              {group.items.map((item) => {
+                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const Icon = item.icon;
+                const badgeCount = item.badge === "leads" ? badges.leads : item.badge === "notifications" ? badges.notifications : 0;
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className={active ? "active" : ""}>
+                    <Icon size={19} />
+                    <span>{item.label}</span>
+                    {badgeCount > 0 && <b className="nav-badge" aria-label={`${badgeCount} new`}>{badgeCount > 99 ? "99+" : badgeCount}</b>}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="sidebar-footer">
@@ -190,7 +219,7 @@ export function AppShell({
       </aside>
 
       <main className="app-main">
-        <GpsClockInAgent userId={userId} projects={gpsProjects} hasActiveTime={Boolean(activeTime)} />
+        <GpsClockInAgent ownerId={businessOwnerId} ownerHourlyCost={ownerHourlyCost} projects={gpsProjects} hasActiveTime={Boolean(activeTime)} />
         {activeTime && (
           <div
             style={{

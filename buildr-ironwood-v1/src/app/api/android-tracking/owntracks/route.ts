@@ -16,8 +16,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const maximumBodyBytes = 64 * 1024;
-const minimumVisitMinutes = 5;
-const maximumVisitMinutes = 18 * 60;
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, {
@@ -46,7 +44,7 @@ async function notifyReview(
     owner_id: ownerId,
     title,
     body,
-    href: "/time#android-tracking",
+    href: "/settings/time#android-tracking",
     kind: "time",
   });
 }
@@ -95,16 +93,29 @@ export async function POST(request: Request) {
   }
 
   const now = new Date();
-  const { data: projectRows, error: projectsError } = await admin
-    .from("projects")
-    .select("id,name,status,jobsite_latitude,jobsite_longitude,geofence_radius_meters,gps_clock_in_enabled,estimates(title)")
-    .eq("owner_id", device.owner_id);
+  const [
+    { data: projectRows, error: projectsError },
+    { data: timeSettings },
+  ] = await Promise.all([
+    admin
+      .from("projects")
+      .select("id,name,status,jobsite_latitude,jobsite_longitude,geofence_radius_meters,gps_clock_in_enabled,estimates(title)")
+      .eq("owner_id", device.owner_id),
+    admin
+      .from("business_settings")
+      .select("owner_hourly_cost,android_minimum_visit_minutes,android_maximum_visit_hours")
+      .eq("owner_id", device.owner_id)
+      .maybeSingle(),
+  ]);
 
   if (projectsError) {
     return NextResponse.json({ error: "Could not load Buildr jobs" }, { status: 500 });
   }
 
   const projects = (projectRows ?? []) as unknown as TrackingProject[];
+  const minimumVisitMinutes = Math.min(120, Math.max(1, Number(timeSettings?.android_minimum_visit_minutes ?? 5)));
+  const maximumVisitMinutes = Math.min(24, Math.max(1, Number(timeSettings?.android_maximum_visit_hours ?? 18))) * 60;
+  const ownerHourlyCost = Math.min(1000, Math.max(0, Number(timeSettings?.owner_hourly_cost ?? 0)));
   const commands = buildOwnTracksWaypointCommand(projects);
 
   await admin
@@ -244,7 +255,7 @@ export async function POST(request: Request) {
       mileage: 0,
       billable: true,
       manual_entry: false,
-      hourly_cost: 0,
+      hourly_cost: ownerHourlyCost,
       clock_in_method: "android_geofence",
       external_source_key: sourceKey,
     })

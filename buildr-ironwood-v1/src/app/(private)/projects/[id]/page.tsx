@@ -15,6 +15,7 @@ import {
   PROJECT_STATUS_OPTIONS,
 } from "@/lib/projects";
 import { createClient } from "@/lib/supabase/server";
+import { getBusinessAccess } from "@/lib/business-access";
 
 async function updateProjectStatus(formData: FormData) {
   "use server";
@@ -34,6 +35,7 @@ async function updateProjectStatus(formData: FormData) {
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
+  const access = await getBusinessAccess(supabase);
 
   const { data: project, error } = await supabase
     .from("projects")
@@ -48,7 +50,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const estimate = project.estimates as any;
   const estimateId = estimate?.id ?? null;
 
-  const [{ data: mediaRows }, { data: laborItems }, { data: paymentMilestones }, { data: selectionItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }, { data: closeout }, { data: punchItems }] = await Promise.all([
+  const [{ data: mediaRows }, { data: laborItems }, { data: paymentMilestones }, { data: selectionItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }, { data: closeout }, { data: punchItems }, { data: settings }] = await Promise.all([
     supabase
       .from("project_media")
       .select("id,storage_path,file_name,category,room_location,caption,customer_visible,created_at")
@@ -79,7 +81,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       : Promise.resolve({ data: [] } as any),
     supabase
       .from("time_entries")
-      .select("id,work_category,duration_minutes,ended_at,hourly_cost")
+      .select("id,team_member_id,work_category,duration_minutes,ended_at,hourly_cost")
       .eq("project_id", id)
       .order("started_at", { ascending: true }),
     supabase
@@ -102,6 +104,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .select("*")
       .eq("project_id", id)
       .order("created_at"),
+    access
+      ? supabase
+          .from("business_settings")
+          .select("owner_hourly_cost")
+          .eq("owner_id", access.ownerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null } as any),
   ]);
 
   const media = await Promise.all((mediaRows ?? []).map(async (item) => {
@@ -181,7 +190,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div className="table-wrap"><table><thead><tr><th>Date</th><th>Method</th><th>Reference</th><th>Notes</th><th>Amount</th></tr></thead><tbody>{(payments ?? []).map((payment: any) => <tr key={payment.id}><td>{new Date(payment.received_at).toLocaleDateString()}</td><td className="capitalize">{payment.payment_method}</td><td>{payment.reference_number || "—"}</td><td>{payment.notes || "—"}</td><td><strong>{money(Number(payment.amount))}</strong></td></tr>)}{!payments?.length && <tr><td colSpan={5} className="empty-cell">No payments have been recorded for this project yet.</td></tr>}</tbody></table></div>
       </section>
 
-      <LaborVsActual laborItems={(laborItems ?? []) as any} timeEntries={(timeEntries ?? []) as any}/>
+      <LaborVsActual laborItems={(laborItems ?? []) as any} timeEntries={(timeEntries ?? []) as any} ownerHourlyCost={Number(settings?.owner_hourly_cost ?? 0)}/>
 
       <section className="panel project-change-orders">
         <div className="panel-heading"><div><h2>Change orders</h2><p>Project-linked scope changes with their own customer approval trail.</p></div>{activeProject && <Link href={`/projects/${project.id}/change-orders/new`} className="button button--gold"><Plus size={16}/>New change order</Link>}</div>

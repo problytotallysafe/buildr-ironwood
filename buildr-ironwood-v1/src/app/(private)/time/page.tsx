@@ -1,7 +1,7 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { TimeTracker } from "@/components/time-tracker";
-import { GpsClockInSettings } from "@/components/gps-clock-in";
-import { AndroidTrackingSetup } from "@/components/android-tracking-setup";
+import { getBusinessAccess } from "@/lib/business-access";
 import { ACTIVE_PROJECT_STATUSES } from "@/lib/projects";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,11 +15,13 @@ export default async function TimePage({
   const query = await searchParams;
 
   const supabase = await createClient();
+  const access = await getBusinessAccess(supabase);
 
   const [
     { data: projects },
     { data: teamMembers },
     { data: entries },
+    { data: settings },
   ] = await Promise.all([
     supabase
       .from("projects")
@@ -63,6 +65,13 @@ export default async function TimePage({
         ascending: false,
       })
       .limit(100),
+    access
+      ? supabase
+          .from("business_settings")
+          .select("owner_hourly_cost")
+          .eq("owner_id", access.ownerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null } as any),
   ]);
 
   const activeProjects = projects ?? [];
@@ -77,17 +86,17 @@ export default async function TimePage({
       <PageHeader
         eyebrow="Job costing"
         title="Time Tracker"
+        actions={<Link className="button button--outline" href="/settings/time">Time & GPS settings</Link>}
       />
-
-      <GpsClockInSettings projects={activeProjects as any} />
-
-      <AndroidTrackingSetup />
 
       <TimeTracker
         projects={activeProjects as any}
         teamMembers={(teamMembers ?? []) as any}
         entries={(entries ?? []) as any}
         selectedProject={selectedProject}
+        ownerHourlyCost={Number(settings?.owner_hourly_cost ?? 0)}
+        canTrackOwner={access?.role === "owner"}
+        canManageWorkers={access?.role === "owner" || access?.role === "admin"}
       />
     </div>
   );

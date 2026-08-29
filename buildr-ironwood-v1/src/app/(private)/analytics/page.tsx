@@ -2,6 +2,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/money";
+import { getBusinessAccess } from "@/lib/business-access";
+import { effectiveHourlyCost, ownerCostIsMissing } from "@/lib/labor-cost";
 
 function pct(value: number) {
   if (!Number.isFinite(value)) return "0.0%";
@@ -15,6 +17,7 @@ export default async function AnalyticsPage({
 }) {
   const query = await searchParams;
   const supabase = await createClient();
+  const access = await getBusinessAccess(supabase);
 
   const { data: projects } = await supabase
     .from("projects")
@@ -51,7 +54,7 @@ export default async function AnalyticsPage({
     .map((project: any) => project.id)
     .filter(Boolean);
 
-  const [{ data: estimateItems }, { data: timeEntries }] = await Promise.all([
+  const [{ data: estimateItems }, { data: timeEntries }, { data: settings }] = await Promise.all([
     estimateIds.length
       ? supabase
           .from("estimate_items")
@@ -65,11 +68,29 @@ export default async function AnalyticsPage({
       ? supabase
           .from("time_entries")
           .select(
-            "project_id,duration_minutes,ended_at,hourly_cost",
+            "project_id,team_member_id,duration_minutes,ended_at,hourly_cost",
           )
           .in("project_id", projectIds)
       : Promise.resolve({ data: [] } as any),
+    access
+      ? supabase
+          .from("business_settings")
+          .select("owner_hourly_cost")
+          .eq("owner_id", access.ownerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null } as any),
   ]);
+  const ownerHourlyCost = Number(settings?.owner_hourly_cost ?? 0);
+  const timeRows = (timeEntries ?? []) as Array<{
+    project_id: string;
+    team_member_id: string | null;
+    duration_minutes: number | null;
+    ended_at: string | null;
+    hourly_cost: number | string | null;
+  }>;
+  const incompleteOwnerCost = timeRows.some(
+    (entry) => entry.ended_at && ownerCostIsMissing(entry, ownerHourlyCost),
+  );
 
   const laborEstimatedByEstimate = new Map<string, number>();
 
@@ -96,7 +117,7 @@ export default async function AnalyticsPage({
     { hours: number; cost: number }
   >();
 
-  for (const entry of timeEntries ?? []) {
+  for (const entry of timeRows) {
     if (!entry.ended_at) continue;
 
     const minutes = Number(
@@ -117,7 +138,7 @@ export default async function AnalyticsPage({
 
     current.cost +=
       hours *
-      Number(entry.hourly_cost ?? 0);
+      effectiveHourlyCost(entry, ownerHourlyCost);
 
     actualLaborByProject.set(
       entry.project_id,
@@ -183,7 +204,7 @@ export default async function AnalyticsPage({
           0,
           estimatedBaseCost -
             estimatedLabor +
-            actualLabor.cost,
+            Math.max(estimatedLabor, actualLabor.cost),
         );
 
       const estimatedGrossProfit =
@@ -340,6 +361,13 @@ export default async function AnalyticsPage({
         eyebrow="Business intelligence"
         title="Analytics"
       />
+
+      {incompleteOwnerCost && (
+        <div className="settings-warning">
+          <div><strong>Owner labor cost is not set.</strong><span>Tracked hours are complete, but actual labor cost is understated. Profit projections continue using the accepted labor budget until a rate is set.</span></div>
+          <Link href="/settings/time">Set owner hourly cost</Link>
+        </div>
+      )}
 
       <section className="analytics-summary-grid">
         <Link href="/analytics?view=contract#analytics-breakdown" className={`panel analytics-stat analytics-stat-link ${selectedView === "contract" ? "active" : ""}`}>
