@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, createPasswordRecoveryClient } from "@/lib/supabase/client";
 import { IronwoodLogo } from "@/components/ironwood-logo";
 
 export default function LoginPage() {
@@ -35,11 +35,11 @@ export default function LoginPage() {
     }
     setBusy(true);
     setMessage("");
-    const { error } = await createClient().auth.resetPasswordForEmail(email.trim(), {
+    const { error } = await createPasswordRecoveryClient().auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/auth/confirm?next=/update-password`,
     });
     setBusy(false);
-    setMessage(error ? error.message : "Check your email to set a new password.");
+    setMessage(error ? error.message : "Check your email to set a new password. You can open the link on any device.");
   }
 
   return (
