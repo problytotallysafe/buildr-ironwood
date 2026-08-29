@@ -130,7 +130,7 @@ export async function POST(request: Request) {
   const externalKey = ownTracksEventKey(device.id, transition);
   const { data: trackingEvent, error: eventError } = await admin
     .from("android_tracking_events")
-    .insert({
+    .upsert({
       owner_id: device.owner_id,
       device_id: device.id,
       project_id: project?.id ?? null,
@@ -138,14 +138,14 @@ export async function POST(request: Request) {
       occurred_at: transition.occurredAt,
       external_key: externalKey,
       status: project ? "pending" : "unmatched",
-    })
+    }, { onConflict: "external_key", ignoreDuplicates: true })
     .select("id")
-    .single();
+    .maybeSingle();
 
-  if (eventError?.code === "23505") return ownTracksResponse(commands);
-  if (eventError || !trackingEvent) {
+  if (eventError) {
     return NextResponse.json({ error: "Could not record location event" }, { status: 500 });
   }
+  if (!trackingEvent) return ownTracksResponse(commands);
 
   if (!project) {
     await notifyReview(
