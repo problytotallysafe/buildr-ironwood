@@ -6,6 +6,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // The website lead endpoint authenticates with its own private ingestion key.
-  matcher: ["/((?!api/leads|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // Public ingestion endpoints authenticate with their own private keys.
+  matcher: ["/((?!api/leads|api/android-tracking/owntracks|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

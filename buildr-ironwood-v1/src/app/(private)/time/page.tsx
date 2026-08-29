@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { TimeTracker } from "@/components/time-tracker";
 import { GpsClockInSettings } from "@/components/gps-clock-in";
+import { AndroidTrackingSetup } from "@/components/android-tracking-setup";
 import { ACTIVE_PROJECT_STATUSES } from "@/lib/projects";
 import { createClient } from "@/lib/supabase/server";
 
@@ -79,6 +80,8 @@ export default async function TimePage({
       />
 
       <GpsClockInSettings projects={activeProjects as any} />
+
+      <AndroidTrackingSetup />
 
       <TimeTracker
         projects={activeProjects as any}
