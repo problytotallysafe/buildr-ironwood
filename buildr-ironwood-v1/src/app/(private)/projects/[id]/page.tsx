@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { ArrowLeft, ChevronRight, Clock3, CreditCard, FileText, Pencil, Plus, ReceiptText } from "lucide-react";
+import { ArrowLeft, ChevronRight, Clock3, CreditCard, FileText, Pencil, PhoneCall, Plus, ReceiptText } from "lucide-react";
 
 import { LaborVsActual } from "@/components/labor-vs-actual";
 import { PageHeader } from "@/components/page-header";
@@ -10,12 +10,21 @@ import { ProjectCloseout } from "@/components/project-closeout";
 import { StatusPill } from "@/components/status-pill";
 import { money } from "@/lib/money";
 import {
+  callbackAffectsFinancials,
+  callbackInternalCost,
+  callbackOptionLabel,
+  callbackResponsibilityOptions,
+  callbackWarrantyOptions,
+  safeCallbackView,
+  summarizeCallbackFinancials,
+} from "@/lib/project-callbacks";
+import {
   isActiveProjectStatus,
   isProjectStatus,
   PROJECT_STATUS_OPTIONS,
 } from "@/lib/projects";
 import { createClient } from "@/lib/supabase/server";
-import { getBusinessAccess } from "@/lib/business-access";
+import { canManageSales, getBusinessAccess } from "@/lib/business-access";
 
 async function updateProjectStatus(formData: FormData) {
   "use server";
@@ -32,8 +41,16 @@ async function updateProjectStatus(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ callbacks?: string }>;
+}) {
   const { id } = await params;
+  const query = await searchParams;
+  const callbackView = safeCallbackView(query.callbacks);
   const supabase = await createClient();
   const access = await getBusinessAccess(supabase);
 
@@ -50,7 +67,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const estimate = project.estimates as any;
   const estimateId = estimate?.id ?? null;
 
-  const [{ data: mediaRows }, { data: laborItems }, { data: paymentMilestones }, { data: selectionItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }, { data: closeout }, { data: punchItems }, { data: settings }] = await Promise.all([
+  const [{ data: mediaRows }, { data: laborItems }, { data: paymentMilestones }, { data: selectionItems }, { data: timeEntries }, { data: changeOrders }, { data: payments }, { data: closeout }, { data: punchItems }, { data: callbackRows }, { data: settings }] = await Promise.all([
     supabase
       .from("project_media")
       .select("id,storage_path,file_name,category,room_location,caption,customer_visible,created_at")
@@ -104,6 +121,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .select("*")
       .eq("project_id", id)
       .order("created_at"),
+    supabase
+      .from("project_callbacks")
+      .select("id,callback_number,title,status,reported_at,warranty_status,cost_responsibility,estimated_internal_cost,actual_internal_cost,homeowner_amount,archived_at,deleted_at")
+      .eq("project_id", id)
+      .order("reported_at", { ascending: false }),
     access
       ? supabase
           .from("business_settings")
@@ -124,6 +146,24 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const amountPaid = Number(project.amount_paid ?? 0);
   const remaining = Math.max(0, contractTotal - amountPaid);
   const activeProject = isActiveProjectStatus(project.status);
+  const completedProject = project.status === "complete";
+  const canManageCallbacks = Boolean(access && canManageSales(access));
+  const allCallbacks = callbackRows ?? [];
+  const callbackCounts = {
+    active: allCallbacks.filter((item: any) => !item.archived_at && !item.deleted_at).length,
+    archived: allCallbacks.filter((item: any) => item.archived_at && !item.deleted_at).length,
+    trash: allCallbacks.filter((item: any) => item.deleted_at).length,
+    all: allCallbacks.filter((item: any) => !item.deleted_at).length,
+  };
+  const callbacks = allCallbacks.filter((item: any) => {
+    if (callbackView === "trash") return Boolean(item.deleted_at);
+    if (callbackView === "archived") return Boolean(item.archived_at && !item.deleted_at);
+    if (callbackView === "all") return !item.deleted_at;
+    return !item.archived_at && !item.deleted_at;
+  });
+  const callbackFinancials = summarizeCallbackFinancials(allCallbacks as any);
+  const openCallbackCount = allCallbacks.filter((item: any) => !item.archived_at && !item.deleted_at && item.status !== "completed").length;
+  const approvedChangeTotal = (changeOrders ?? []).filter((item: any) => item.status === "accepted").reduce((sum: number, item: any) => sum + Number(item.total ?? 0), 0);
 
   return (
     <div className="page-wrap">
@@ -148,6 +188,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <Link href={`/projects/${project.id}/edit`} className="button button--outline">
           <Pencil size={17}/>Edit project
         </Link>
+        {completedProject && canManageCallbacks && <Link href={`/projects/${project.id}/callbacks/new`} className="button button--outline">
+          <PhoneCall size={17}/>Add callback
+        </Link>}
         {activeProject && <Link href={`/projects/${project.id}/change-orders/new`} className="button button--outline">
           <Plus size={17}/>Add change order
         </Link>}
@@ -165,6 +208,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <Link className="panel project-overview-link" href="#payments"><span className="project-overview-label">Paid</span><div className="project-overview-value"><strong className="project-overview-number">{money(amountPaid)}</strong><ChevronRight size={18}/></div></Link>
         <Link className="panel project-overview-link" href="#payments"><span className="project-overview-label">Remaining</span><div className="project-overview-value"><strong className="project-overview-number">{money(remaining)}</strong><ChevronRight size={18}/></div></Link>
         <Link className="panel project-overview-link" href="#closeout"><span className="project-overview-label">Punch list</span><div className="project-overview-value"><strong className="project-overview-number">{(punchItems ?? []).filter((item: any) => item.status !== "complete").length} open</strong><ChevronRight size={18}/></div></Link>
+        {(completedProject || allCallbacks.length > 0) && <Link className="panel project-overview-link" href="#callbacks"><span className="project-overview-label">Callbacks</span><div className="project-overview-value"><strong className="project-overview-number">{openCallbackCount} open</strong><ChevronRight size={18}/></div></Link>}
       </section>
 
       <section id="status" className="panel project-status-panel project-section-anchor">
@@ -174,7 +218,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
       <section id="contract" className="panel project-contract-panel project-section-anchor">
         <div className="panel-heading"><div><span className="project-overview-label">Contract details</span><h2>{money(contractTotal)} contract total</h2><p>Review the accepted estimate, scope, and agreed payment schedule.</p></div>{estimateId && <Link href={`/estimates/${estimateId}`} className="button button--outline"><FileText size={16}/>View accepted estimate</Link>}</div>
-        <div className="project-contract-grid"><div><span>Base estimate</span><strong>{money(Number(estimate?.total ?? 0))}</strong></div><div><span>Approved changes</span><strong>{money(Math.max(0, contractTotal - Number(estimate?.total ?? 0)))}</strong></div><div><span>Current contract</span><strong>{money(contractTotal)}</strong></div></div>
+        <div className="project-contract-grid"><div><span>Base estimate</span><strong>{money(Number(estimate?.total ?? 0))}</strong></div><div><span>Approved changes</span><strong>{money(approvedChangeTotal)}</strong></div><div><span>Customer-paid callbacks</span><strong>{money(callbackFinancials.revenue)}</strong></div><div><span>Current contract</span><strong>{money(contractTotal)}</strong></div></div>
         {estimate?.scope && <div className="project-contract-copy"><h3>Scope of work</h3><p className="pre-line">{estimate.scope}</p></div>}
         {estimate?.payment_schedule && <div className="project-contract-copy"><h3>Payment schedule</h3><p className="pre-line">{estimate.payment_schedule}</p></div>}
       </section>
@@ -196,6 +240,26 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div className="panel-heading"><div><h2>Change orders</h2><p>Project-linked scope changes with their own customer approval trail.</p></div>{activeProject && <Link href={`/projects/${project.id}/change-orders/new`} className="button button--gold"><Plus size={16}/>New change order</Link>}</div>
         <div className="table-wrap"><table><thead><tr><th>Change order</th><th>Status</th><th>Date</th><th>Price change</th></tr></thead><tbody>{(changeOrders??[]).map((co:any)=><tr key={co.id}><td><Link className="table-link" href={`/change-orders/${co.id}`}>{co.change_order_number}<small>{co.title}</small></Link></td><td><StatusPill value={co.status}/></td><td>{new Date(co.created_at).toLocaleDateString()}</td><td>{money(co.total)}</td></tr>)}{!changeOrders?.length&&<tr><td colSpan={4} className="empty-cell">No change orders for this project.</td></tr>}</tbody></table></div>
       </section>
+
+      {(completedProject || allCallbacks.length > 0) && <section id="callbacks" className="panel project-change-orders project-section-anchor">
+        <div className="panel-heading"><div><h2>Customer callbacks</h2><p>Post-completion warranty and repair records tied to this job’s profit.</p></div>{completedProject && canManageCallbacks && <Link href={`/projects/${project.id}/callbacks/new`} className="button button--gold"><PhoneCall size={16}/>New callback</Link>}</div>
+        <div className="callback-impact-strip">
+          <div><span>Customer charges</span><strong>{money(callbackFinancials.revenue)}</strong></div>
+          <div><span>Ironwood cost</span><strong>{money(callbackFinancials.cost)}</strong></div>
+          <div><span>Net profit impact</span><strong className={callbackFinancials.net < 0 ? "analytics-negative" : "callback-profit-positive"}>{money(callbackFinancials.net)}</strong></div>
+        </div>
+        <nav className="lead-view-tabs callback-folder-tabs" aria-label="Callback folders">
+          {(["active", "archived", "trash", "all"] as const).map((folder) => <Link key={folder} href={`/projects/${project.id}?callbacks=${folder}#callbacks`} className={callbackView === folder ? "active" : ""}><span>{folder === "trash" ? "Trash" : `${folder[0].toUpperCase()}${folder.slice(1)}`}</span><b>{callbackCounts[folder]}</b></Link>)}
+        </nav>
+        <div className="table-wrap"><table><thead><tr><th>Callback</th><th>Status</th><th>Warranty</th><th>Responsibility</th><th>Date</th><th>Profit impact</th></tr></thead><tbody>
+          {callbacks.map((item: any) => {
+            const financial = summarizeCallbackFinancials([item]);
+            const accepted = callbackAffectsFinancials(item);
+            return <tr key={item.id}><td><Link className="table-link" href={`/callbacks/${item.id}`}>{item.callback_number}<small>{item.title}</small></Link></td><td><StatusPill value={item.status}/></td><td>{callbackOptionLabel(callbackWarrantyOptions, item.warranty_status)}</td><td>{callbackOptionLabel(callbackResponsibilityOptions, item.cost_responsibility)}</td><td>{new Date(`${item.reported_at}T12:00:00`).toLocaleDateString()}</td><td className={financial.net < 0 ? "analytics-negative" : ""}><strong>{accepted ? money(financial.net) : "Pending"}</strong><small>{money(Number(item.homeowner_amount ?? 0))} charge · {money(callbackInternalCost(item))} cost</small></td></tr>;
+          })}
+          {!callbacks.length && <tr><td colSpan={6} className="empty-cell">No callbacks in this folder.</td></tr>}
+        </tbody></table></div>
+      </section>}
 
       <ProjectCloseout projectId={project.id} initialCloseout={closeout} initialItems={punchItems ?? []}/>
 

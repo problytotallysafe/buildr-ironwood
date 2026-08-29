@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/money";
 import { getBusinessAccess } from "@/lib/business-access";
 import { effectiveHourlyCost, ownerCostIsMissing } from "@/lib/labor-cost";
+import { summarizeCallbackFinancials } from "@/lib/project-callbacks";
 
 function pct(value: number) {
   if (!Number.isFinite(value)) return "0.0%";
@@ -54,7 +55,7 @@ export default async function AnalyticsPage({
     .map((project: any) => project.id)
     .filter(Boolean);
 
-  const [{ data: estimateItems }, { data: timeEntries }, { data: settings }] = await Promise.all([
+  const [{ data: estimateItems }, { data: timeEntries }, { data: callbackRows }, { data: settings }] = await Promise.all([
     estimateIds.length
       ? supabase
           .from("estimate_items")
@@ -71,6 +72,14 @@ export default async function AnalyticsPage({
             "project_id,team_member_id,duration_minutes,ended_at,hourly_cost",
           )
           .in("project_id", projectIds)
+      : Promise.resolve({ data: [] } as any),
+    projectIds.length
+      ? supabase
+          .from("project_callbacks")
+          .select("project_id,status,estimated_internal_cost,actual_internal_cost,homeowner_amount,deleted_at")
+          .in("project_id", projectIds)
+          .in("status", ["accepted", "completed"])
+          .is("deleted_at", null)
       : Promise.resolve({ data: [] } as any),
     access
       ? supabase
@@ -91,6 +100,15 @@ export default async function AnalyticsPage({
   const incompleteOwnerCost = timeRows.some(
     (entry) => entry.ended_at && ownerCostIsMissing(entry, ownerHourlyCost),
   );
+  const callbackFinancialsByProject = new Map<string, { revenue: number; cost: number; net: number }>();
+  for (const row of callbackRows ?? []) {
+    const current = callbackFinancialsByProject.get(row.project_id) ?? { revenue: 0, cost: 0, net: 0 };
+    const next = summarizeCallbackFinancials([row]);
+    current.revenue += next.revenue;
+    current.cost += next.cost;
+    current.net = current.revenue - current.cost;
+    callbackFinancialsByProject.set(row.project_id, current);
+  }
 
   const laborEstimatedByEstimate = new Map<string, number>();
 
@@ -169,9 +187,12 @@ export default async function AnalyticsPage({
           estimate?.tax_total ?? 0,
         );
 
-      const preTaxRevenue =
+      const basePreTaxRevenue =
         estimatedBaseCost +
         estimatedMarkup;
+
+      const callbackFinancials = callbackFinancialsByProject.get(project.id) ?? { revenue: 0, cost: 0, net: 0 };
+      const preTaxRevenue = basePreTaxRevenue + callbackFinancials.revenue;
 
       const contractTotal =
         Number(
@@ -204,11 +225,12 @@ export default async function AnalyticsPage({
           0,
           estimatedBaseCost -
             estimatedLabor +
-            Math.max(estimatedLabor, actualLabor.cost),
+            Math.max(estimatedLabor, actualLabor.cost) +
+            callbackFinancials.cost,
         );
 
       const estimatedGrossProfit =
-        preTaxRevenue -
+        basePreTaxRevenue -
         estimatedBaseCost;
 
       const projectedGrossProfit =
@@ -216,9 +238,9 @@ export default async function AnalyticsPage({
         projectedDirectCost;
 
       const estimatedMargin =
-        preTaxRevenue > 0
+        basePreTaxRevenue > 0
           ? (estimatedGrossProfit /
-              preTaxRevenue) *
+              basePreTaxRevenue) *
             100
           : 0;
 
@@ -253,6 +275,7 @@ export default async function AnalyticsPage({
         contractTotal,
         paid,
         remaining,
+        estimatedRevenue: basePreTaxRevenue,
         preTaxRevenue,
         estimatedBaseCost,
         estimatedLabor,
@@ -265,6 +288,9 @@ export default async function AnalyticsPage({
         projectedGrossProfit,
         estimatedMargin,
         projectedMargin,
+        callbackRevenue: callbackFinancials.revenue,
+        callbackCost: callbackFinancials.cost,
+        callbackNet: callbackFinancials.net,
       };
     },
   );
@@ -274,6 +300,8 @@ export default async function AnalyticsPage({
       sum.contract += row.contractTotal;
       sum.paid += row.paid;
       sum.remaining += row.remaining;
+      sum.estimatedRevenue +=
+        row.estimatedRevenue;
       sum.preTaxRevenue +=
         row.preTaxRevenue;
       sum.estimatedBase +=
@@ -288,12 +316,16 @@ export default async function AnalyticsPage({
         row.actualLaborCost;
       sum.actualLaborHours +=
         row.actualLaborHours;
+      sum.callbackRevenue += row.callbackRevenue;
+      sum.callbackCost += row.callbackCost;
+      sum.callbackNet += row.callbackNet;
       return sum;
     },
     {
       contract: 0,
       paid: 0,
       remaining: 0,
+      estimatedRevenue: 0,
       preTaxRevenue: 0,
       estimatedBase: 0,
       projectedDirect: 0,
@@ -301,13 +333,16 @@ export default async function AnalyticsPage({
       projectedProfit: 0,
       actualLaborCost: 0,
       actualLaborHours: 0,
+      callbackRevenue: 0,
+      callbackCost: 0,
+      callbackNet: 0,
     },
   );
 
   const overallEstimatedMargin =
-    totals.preTaxRevenue > 0
+    totals.estimatedRevenue > 0
       ? (totals.estimatedProfit /
-          totals.preTaxRevenue) *
+          totals.estimatedRevenue) *
         100
       : 0;
 
@@ -348,6 +383,7 @@ export default async function AnalyticsPage({
     margin: { label: "Projected margin", value: (row: (typeof analytics)[number]) => row.projectedMargin, format: pct },
     "labor-cost": { label: "Actual labor cost", value: (row: (typeof analytics)[number]) => row.actualLaborCost, format: money },
     labor: { label: "Tracked labor hours", value: (row: (typeof analytics)[number]) => row.actualLaborHours, format: (value: number) => `${value.toFixed(1)} hr` },
+    callbacks: { label: "Callback profit impact", value: (row: (typeof analytics)[number]) => row.callbackNet, format: money },
   } as const;
   const selectedView = query.view && query.view in metricViews
     ? query.view as keyof typeof metricViews
@@ -523,6 +559,17 @@ export default async function AnalyticsPage({
               </dd>
             </Link>
 
+            <Link href="/analytics?view=callbacks#analytics-breakdown">
+              <dt>
+                Callback profit impact
+              </dt>
+              <dd className={totals.callbackNet < 0 ? "analytics-negative" : ""}>
+                {money(
+                  totals.callbackNet,
+                )}
+              </dd>
+            </Link>
+
             <Link href="/analytics?view=profit#analytics-breakdown">
               <dt>
                 Projected gross profit
@@ -613,6 +660,9 @@ export default async function AnalyticsPage({
                   Actual Labor
                 </th>
                 <th>
+                  Callbacks
+                </th>
+                <th>
                   Projected Profit
                 </th>
                 <th>
@@ -678,6 +728,22 @@ export default async function AnalyticsPage({
 
                     <td
                       className={
+                        row.callbackNet < 0
+                          ? "analytics-negative"
+                          : ""
+                      }
+                    >
+                      {money(
+                        row.callbackNet,
+                      )}
+
+                      <small>
+                        {money(row.callbackRevenue)} charge · {money(row.callbackCost)} cost
+                      </small>
+                    </td>
+
+                    <td
+                      className={
                         row.projectedGrossProfit <
                         0
                           ? "analytics-negative"
@@ -708,7 +774,7 @@ export default async function AnalyticsPage({
               {!analytics.length && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="empty-cell"
                   >
                     Accepted projects will appear here automatically.

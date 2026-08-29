@@ -14,9 +14,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const [{ data: project }, { data: changeOrders }, { data: payments }] = await Promise.all([
+    const [{ data: project }, { data: changeOrders }, { data: callbackCharges }, { data: payments }] = await Promise.all([
       supabase.from("projects").select("id,name,status,contract_total,customers(first_name,last_name,email),estimates(id,estimate_number,title,total,public_token)").eq("id", id).single(),
       supabase.from("change_orders").select("total").eq("project_id", id).eq("status", "accepted"),
+      supabase.from("project_callbacks").select("homeowner_amount").eq("project_id", id).in("status", ["accepted", "completed"]).is("deleted_at", null).gt("homeowner_amount", 0),
       supabase.from("payments").select("amount").eq("project_id", id),
     ]);
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
@@ -27,7 +28,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!customer?.email) return NextResponse.json({ error: "Add a customer email before sending." }, { status: 400 });
     if (!process.env.RESEND_API_KEY || !process.env.PROPOSAL_FROM_EMAIL) return NextResponse.json({ error: "Email is not configured. Add RESEND_API_KEY and PROPOSAL_FROM_EMAIL." }, { status: 500 });
 
-    const total = Number(estimate.total ?? project.contract_total ?? 0) + (changeOrders ?? []).reduce((sum, item) => sum + Number(item.total), 0);
+    const total = Number(estimate.total ?? project.contract_total ?? 0)
+      + (changeOrders ?? []).reduce((sum, item) => sum + Number(item.total), 0)
+      + (callbackCharges ?? []).reduce((sum, item) => sum + Number(item.homeowner_amount), 0);
     const paid = (payments ?? []).reduce((sum, item) => sum + Number(item.amount), 0);
     const balance = Math.max(0, total - paid);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
@@ -37,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       from: process.env.PROPOSAL_FROM_EMAIL,
       to: customer.email,
       subject: `Ironwood final invoice ${estimate.estimate_number}: ${estimate.title || project.name}`,
-      html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#202722"><div style="background:#183d32;padding:28px;color:white"><div style="color:#c59a52;font-size:12px;letter-spacing:2px">IRONWOOD HOME REMODELING</div><h1 style="margin:8px 0">Your final invoice is ready.</h1></div><div style="padding:28px;border:1px solid #ded8cc"><p>Hello ${escapeHtml(customer.first_name || "there")},</p><p>Thank you for trusting us with <strong>${escapeHtml(estimate.title || project.name)}</strong>. Your final invoice, including approved change orders and payments received, is ready.</p><p style="font-size:26px;color:#183d32"><strong>Balance due: ${money(balance)}</strong></p><p><a href="${invoiceUrl}" style="display:inline-block;background:#c59a52;color:#172b24;text-decoration:none;padding:14px 22px;border-radius:999px;font-weight:bold">View final invoice</a></p><p>Please contact us if you have any questions.</p><p>Thank you,<br><strong>Ironwood Remodeling</strong><br>479.496.7819</p></div></div>`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#202722"><div style="background:#183d32;padding:28px;color:white"><div style="color:#c59a52;font-size:12px;letter-spacing:2px">IRONWOOD HOME REMODELING</div><h1 style="margin:8px 0">Your final invoice is ready.</h1></div><div style="padding:28px;border:1px solid #ded8cc"><p>Hello ${escapeHtml(customer.first_name || "there")},</p><p>Thank you for trusting us with <strong>${escapeHtml(estimate.title || project.name)}</strong>. Your final invoice, including approved changes, customer-paid callback service, and payments received, is ready.</p><p style="font-size:26px;color:#183d32"><strong>Balance due: ${money(balance)}</strong></p><p><a href="${invoiceUrl}" style="display:inline-block;background:#c59a52;color:#172b24;text-decoration:none;padding:14px 22px;border-radius:999px;font-weight:bold">View final invoice</a></p><p>Please contact us if you have any questions.</p><p>Thank you,<br><strong>Ironwood Remodeling</strong><br>479.496.7819</p></div></div>`,
     }, { headers: { "Idempotency-Key": `invoice-${id}-${Date.now()}` } } as any);
     if (result.error) {
       console.error("INVOICE EMAIL ERROR:", result.error);

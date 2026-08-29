@@ -92,3 +92,11 @@ export function canManageSettings(access: BusinessAccess) {
 export function canManageTeam(access: BusinessAccess) {
   return access.role === "owner" || access.role === "admin";
 }
+
+export function canManageSales(access: BusinessAccess) {
+  return access.role === "owner" || access.role === "admin" || access.role === "estimator";
+}
+
+export function canEditFieldWork(access: BusinessAccess) {
+  return access.role !== "read_only";
+}

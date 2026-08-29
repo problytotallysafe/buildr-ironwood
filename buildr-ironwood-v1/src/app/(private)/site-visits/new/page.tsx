@@ -1,11 +1,14 @@
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { SiteVisitForm } from "@/components/site-visit-form";
+import { canEditFieldWork, getBusinessAccess } from "@/lib/business-access";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function NewSiteVisitPage({searchParams}:{searchParams:Promise<{customer?:string}>}) {
   const query=await searchParams;
   const supabase = await createClient();
+  const access = await getBusinessAccess(supabase);
+  if (!access || !canEditFieldWork(access)) redirect("/site-visits");
   const [{ data: customers }, { data: projects }, { data: estimates }] = await Promise.all([
     supabase.from("customers").select("id,first_name,last_name,company_name").order("last_name"),
     supabase.from("projects").select("id,name,customer_id").order("created_at", { ascending: false }),
@@ -14,12 +17,12 @@ export default async function NewSiteVisitPage({searchParams}:{searchParams:Prom
   async function save(formData: FormData) {
     "use server";
     const client = await createClient();
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) return;
+    const currentAccess = await getBusinessAccess(client);
+    if (!currentAccess || !canEditFieldWork(currentAccess)) redirect("/site-visits");
     const customerId = String(formData.get("customer_id") || "").trim();
     const next = String(formData.get("_next") || "visit");
     const values = Object.fromEntries(["customer_id","visit_date","project_type","people_present","client_goals","measurements","existing_conditions","plumbing_notes","electrical_notes","hvac_notes","access_protection","selections_discussed","unanswered_questions","follow_up_items","photo_notes","status"].map((key) => [key, String(formData.get(key) || "").trim() || null]));
-    const { data, error } = await client.from("site_visit_worksheets").insert({ owner_id: user.id, ...values, project_id: String(formData.get("project_id") || "") || null, estimate_id: String(formData.get("estimate_id") || "") || null }).select("id").single();
+    const { data, error } = await client.from("site_visit_worksheets").insert({ owner_id: currentAccess.ownerId, ...values, project_id: String(formData.get("project_id") || "") || null, estimate_id: String(formData.get("estimate_id") || "") || null }).select("id").single();
     if (error || !data) throw new Error(error?.message || "Could not save the site visit.");
     if (next === "estimate") redirect(`/estimates/new?setup=1&customer=${customerId}&projectType=other&siteVisit=${data.id}`);
     redirect(`/site-visits/${data.id}/edit`);

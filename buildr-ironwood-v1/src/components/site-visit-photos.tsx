@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type Photo = { id: string; storage_path: string; file_name: string; caption: string | null; signed_url: string | null };
 
-export function SiteVisitPhotos({ worksheetId, photos }: { worksheetId: string; photos: Photo[] }) {
+export function SiteVisitPhotos({ worksheetId, photos, editable = true }: { worksheetId: string; photos: Photo[]; editable?: boolean }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [caption, setCaption] = useState("");
@@ -42,9 +42,9 @@ export function SiteVisitPhotos({ worksheetId, photos }: { worksheetId: string; 
 
   return <section className="panel stack">
     <div className="panel-heading"><div><h2>Walkthrough photos</h2></div><Camera/></div>
-    <div className="form-grid"><label>Take or choose photo<input ref={input} type="file" accept="image/*" capture="environment"/></label><label>Caption / location<input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Kitchen north wall, water damage…"/></label></div>
-    <div><button type="button" className="button button--gold" disabled={busy} onClick={upload}><Upload size={16}/>{busy ? "Uploading…" : "Upload photo"}</button></div>
+    {editable && <><div className="form-grid"><label>Take or choose photo<input ref={input} type="file" accept="image/*" capture="environment"/></label><label>Caption / location<input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Kitchen north wall, water damage…"/></label></div>
+    <div><button type="button" className="button button--gold" disabled={busy} onClick={upload}><Upload size={16}/>{busy ? "Uploading…" : "Upload photo"}</button></div></>}
     {error && <p className="error-box">{error}</p>}
-    {photos.length > 0 && <div className="walkthrough-photo-grid">{photos.map((photo) => <figure key={photo.id}><img src={photo.signed_url || ""} alt={photo.caption || photo.file_name}/><figcaption><span>{photo.caption || photo.file_name}</span><button type="button" onClick={() => remove(photo)} disabled={busy} aria-label="Delete photo"><Trash2 size={15}/></button></figcaption></figure>)}</div>}
+    {photos.length > 0 && <div className="walkthrough-photo-grid">{photos.map((photo) => <figure key={photo.id}><img src={photo.signed_url || ""} alt={photo.caption || photo.file_name}/><figcaption><span>{photo.caption || photo.file_name}</span>{editable && <button type="button" onClick={() => remove(photo)} disabled={busy} aria-label="Delete photo"><Trash2 size={15}/></button>}</figcaption></figure>)}</div>}
   </section>;
 }

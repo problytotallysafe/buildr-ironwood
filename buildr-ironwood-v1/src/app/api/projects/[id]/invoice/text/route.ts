@@ -15,9 +15,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const [{ data: project }, { data: changeOrders }, { data: payments }] = await Promise.all([
+    const [{ data: project }, { data: changeOrders }, { data: callbackCharges }, { data: payments }] = await Promise.all([
       supabase.from("projects").select("id,name,status,contract_total,customers(first_name,last_name,phone),estimates(id,estimate_number,title,total,public_token)").eq("id", id).single(),
       supabase.from("change_orders").select("total").eq("project_id", id).eq("status", "accepted"),
+      supabase.from("project_callbacks").select("homeowner_amount").eq("project_id", id).in("status", ["accepted", "completed"]).is("deleted_at", null).gt("homeowner_amount", 0),
       supabase.from("payments").select("amount").eq("project_id", id),
     ]);
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
@@ -28,7 +29,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const phone = normalizeUsPhone(customer?.phone || "");
     if (!phone) return NextResponse.json({ error: "Add a valid 10-digit mobile number to the customer record." }, { status: 400 });
 
-    const total = Number(estimate.total ?? project.contract_total ?? 0) + (changeOrders ?? []).reduce((sum, item) => sum + Number(item.total), 0);
+    const total = Number(estimate.total ?? project.contract_total ?? 0)
+      + (changeOrders ?? []).reduce((sum, item) => sum + Number(item.total), 0)
+      + (callbackCharges ?? []).reduce((sum, item) => sum + Number(item.homeowner_amount), 0);
     const paid = (payments ?? []).reduce((sum, item) => sum + Number(item.amount), 0);
     const balance = Math.max(0, total - paid);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
