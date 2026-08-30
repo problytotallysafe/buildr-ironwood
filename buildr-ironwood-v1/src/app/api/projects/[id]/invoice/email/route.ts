@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const paid = (payments ?? []).reduce((sum, item) => sum + Number(item.amount), 0);
     const balance = Math.max(0, total - paid);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-    const invoiceUrl = `${appUrl}/invoice/${estimate.public_token}`;
+    const invoiceUrl = `${appUrl}/invoice/${estimate.public_token}?via=email`;
     const resend = new Resend(process.env.RESEND_API_KEY);
     const result = await resend.emails.send({
       from: process.env.PROPOSAL_FROM_EMAIL,

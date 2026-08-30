@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { AndroidTrackingSetup } from "@/components/android-tracking-setup";
-import { GpsClockInSettings } from "@/components/gps-clock-in";
+import { OwnTracksJobsiteSettings } from "@/components/owntracks-jobsite-settings";
 import { PageHeader } from "@/components/page-header";
 import { canManageSettings, getBusinessAccess } from "@/lib/business-access";
 import { ACTIVE_PROJECT_STATUSES } from "@/lib/projects";
@@ -85,8 +85,8 @@ export default async function TimeSettingsPage({
 
       {owner ? (
         <>
-          <GpsClockInSettings projects={(projects ?? []) as any} />
           <AndroidTrackingSetup />
+          <OwnTracksJobsiteSettings projects={(projects ?? []) as any} />
         </>
       ) : (
         <section className="panel settings-owner-note"><h2>Phone connections</h2><p>For security, only the primary owner account can connect or disconnect the owner’s phone.</p></section>

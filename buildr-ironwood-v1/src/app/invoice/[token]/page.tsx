@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation";
 import { IronwoodLogo } from "@/components/ironwood-logo";
 import { PrintInvoiceButton } from "@/components/print-invoice-button";
+import { PublicInvoiceViewTracker } from "@/components/public-invoice-view-tracker";
 import { money } from "@/lib/money";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-export default async function PublicInvoicePage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+export default async function PublicInvoicePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ via?: string }> }) {
+  const [{ token }, query] = await Promise.all([params, searchParams]);
   const supabase = createAdminClient();
   const { data: estimate } = await supabase.from("estimates").select("id,estimate_number,title,total,scope,project_address,customers(first_name,last_name,email,phone,address_line1,address_line2,city,state,postal_code)").eq("public_token", token).single();
   if (!estimate) notFound();
@@ -29,6 +30,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   const customerAddress = [customer?.address_line1, customer?.address_line2, customer?.city, customer?.state, customer?.postal_code].filter(Boolean).join(", ");
 
   return <div className="invoice-screen">
+    <PublicInvoiceViewTracker token={token} via={query.via}/>
     <div className="invoice-toolbar invoice-toolbar--public no-print"><span>Ironwood final invoice</span><PrintInvoiceButton/></div>
     <article className="invoice-sheet">
       <header className="invoice-header"><div><IronwoodLogo/><p>{settings?.address}</p><p>{[settings?.phone, settings?.email].filter(Boolean).join(" · ")}</p></div><div><span>FINAL INVOICE</span><h1>{estimate.estimate_number || "Project invoice"}</h1><p>{new Date().toLocaleDateString()}</p></div></header>

@@ -125,7 +125,7 @@ export function AndroidTrackingSetup() {
       </div>
 
       <p>
-        OwnTracks reports jobsite arrivals and departures over encrypted HTTPS. Buildr keeps the event times—not a continuous location trail—and creates a duplicate-safe time entry after departure.
+        OwnTracks is Buildr’s only automatic GPS time source. It reports jobsite arrivals and departures over encrypted HTTPS. Buildr keeps the event times—not a continuous location trail—and creates a duplicate-safe time entry after departure.
       </p>
 
       <div className="button-row">
@@ -155,7 +155,8 @@ export function AndroidTrackingSetup() {
         <li>Choose <strong>HTTP</strong> connection mode, then enter the endpoint, username, and password shown above.</li>
         <li>Use <strong>Manual</strong> monitoring mode so only geofence transitions are published.</li>
         <li>Allow remote waypoint updates, keep the ongoing notification enabled, and set Android battery use to <strong>Unrestricted</strong>.</li>
-        <li>Publish once in OwnTracks. Buildr will return the enabled active-job geofences automatically.</li>
+        <li>Publish once in OwnTracks. Buildr will return every enabled active-job geofence automatically.</li>
+        <li>After adding or changing a jobsite in Buildr, publish once again to update the phone immediately. Otherwise it updates on OwnTracks’ next contact.</li>
       </ol>
 
       {message && <p className="form-message">{message}</p>}

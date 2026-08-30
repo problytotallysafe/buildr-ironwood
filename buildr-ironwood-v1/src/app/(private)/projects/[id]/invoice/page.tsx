@@ -20,6 +20,18 @@ export default async function FinalInvoicePage({ params }: { params: Promise<{ i
   if (!project) notFound();
   const estimate = project.estimates as any;
   const customer = project.customers as any;
+  const { data: invoiceEvents } = estimate?.id
+    ? await supabase
+        .from("estimate_events")
+        .select("event_type,metadata,created_at")
+        .eq("estimate_id", estimate.id)
+        .in("event_type", ["invoice_sent_email", "invoice_sent_via_text", "invoice_viewed"])
+        .order("created_at", { ascending: false })
+    : { data: [] };
+  const sentEvents = (invoiceEvents ?? []).filter((event: any) => event.event_type === "invoice_sent_email" || event.event_type === "invoice_sent_via_text");
+  const viewEvents = (invoiceEvents ?? []).filter((event: any) => event.event_type === "invoice_viewed");
+  const lastSent = sentEvents[0] as any;
+  const lastViewed = viewEvents[0] as any;
   const baseTotal = Number(estimate?.total ?? project.contract_total ?? 0);
   const changeTotal = (changeOrders ?? []).reduce((sum, item) => sum + Number(item.total), 0);
   const callbackTotal = (callbackCharges ?? []).reduce((sum, item) => sum + Number(item.homeowner_amount), 0);
@@ -30,6 +42,10 @@ export default async function FinalInvoicePage({ params }: { params: Promise<{ i
 
   return <div className="invoice-screen">
     <div className="invoice-toolbar no-print"><Link href={`/projects/${id}`}><ArrowLeft size={16}/>Back to project</Link><div className="invoice-toolbar-actions"><InvoiceSendControls projectId={id} enabled={["substantially_complete", "complete"].includes(project.status)}/><PrintInvoiceButton/></div></div>
+    <section className="invoice-activity no-print" aria-label="Invoice delivery activity">
+      <div><span>Sent</span><strong>{lastSent ? new Date(lastSent.created_at).toLocaleString() : "Not sent"}</strong><small>{lastSent?.event_type === "invoice_sent_via_text" ? "Text message" : lastSent ? "Email" : "Send by email or text to begin tracking"}</small></div>
+      <div><span>Customer views</span><strong>{viewEvents.length ? `${viewEvents.length} ${viewEvents.length === 1 ? "view" : "views"}` : "Not viewed"}</strong><small>{lastViewed ? `Last viewed ${new Date(lastViewed.created_at).toLocaleString()} · ${String(lastViewed.metadata?.channel || "direct")}` : "Updates when the invoice link is opened"}</small></div>
+    </section>
     <article className="invoice-sheet">
       <header className="invoice-header"><div><IronwoodLogo/><p>{settings?.address}</p><p>{[settings?.phone, settings?.email].filter(Boolean).join(" · ")}</p></div><div><span>FINAL INVOICE</span><h1>{estimate?.estimate_number || "Project invoice"}</h1><p>{new Date().toLocaleDateString()}</p></div></header>
       <section className="invoice-parties"><div><span>Bill to</span><strong>{customer?.first_name} {customer?.last_name}</strong><p>{customerAddress}</p><p>{[customer?.phone, customer?.email].filter(Boolean).join(" · ")}</p></div><div><span>Project</span><strong>{estimate?.title || project.name}</strong><p>{estimate?.project_address || project.project_address}</p></div></section>

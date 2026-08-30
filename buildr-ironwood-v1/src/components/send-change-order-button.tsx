@@ -1,21 +1,35 @@
 "use client";
 
-import { Send, Trash2 } from "lucide-react";
+import { Mail, MessageSquareText, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-export function SendChangeOrderButton({ id, disabled }: { id: string; disabled?: boolean }) {
+export function SendChangeOrderButton({ id, disabled, emailDisabled, textDisabled }: { id: string; disabled?: boolean; emailDisabled?: boolean; textDisabled?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const router = useRouter();
 
-  async function send() {
+  async function sendEmail() {
     setBusy(true); setMessage("");
     const response = await fetch(`/api/change-orders/${id}/send`, { method: "POST" });
     const body = await response.json().catch(() => ({}));
     setBusy(false); setMessage(response.ok ? "Change order emailed." : body.error || "Could not send change order.");
     if (response.ok) router.refresh();
+  }
+
+  async function sendText() {
+    setBusy(true); setMessage("");
+    const response = await fetch(`/api/change-orders/${id}/text`, { method: "POST" });
+    const body = await response.json().catch(() => ({}));
+    setBusy(false);
+    if (!response.ok) {
+      setMessage(body.error || "Could not prepare the change-order text.");
+      return;
+    }
+    setMessage(body.mode === "sent" ? "Change order texted." : "Opening your text app. Send the prepared message to finish.");
+    router.refresh();
+    if (body.mode === "composer" && body.smsUrl) window.location.href = body.smsUrl;
   }
 
   async function remove() {
@@ -42,5 +56,5 @@ export function SendChangeOrderButton({ id, disabled }: { id: string; disabled?:
     router.refresh();
   }
 
-  return <div className="send-control"><div className="button-row"><button className="button button--gold" type="button" onClick={send} disabled={busy || disabled}><Send size={16}/>{busy ? "Working…" : "Send for approval"}</button><button className="button button--danger" type="button" onClick={remove} disabled={busy}><Trash2 size={16}/>Delete</button></div>{message && <small>{message}</small>}</div>;
+  return <div className="send-control"><div className="button-row"><button className="button button--gold" type="button" onClick={sendEmail} disabled={busy || disabled || emailDisabled}><Mail size={16}/>{busy ? "Working…" : "Email approval"}</button><button className="button button--outline" type="button" onClick={sendText} disabled={busy || disabled || textDisabled}><MessageSquareText size={16}/>Text approval</button><button className="button button--danger" type="button" onClick={remove} disabled={busy}><Trash2 size={16}/>Delete</button></div>{message && <small>{message}</small>}</div>;
 }

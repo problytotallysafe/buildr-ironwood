@@ -26,7 +26,6 @@ import {
 import { useEffect, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
-import { GpsClockInAgent, type GpsProject } from "./gps-clock-in";
 import { IronwoodLogo } from "./ironwood-logo";
 
 type NavItem = {
@@ -94,20 +93,16 @@ export function AppShell({
   children,
   email,
   businessOwnerId,
-  ownerHourlyCost,
   activeTime,
   newLeadCount,
   unreadNotificationCount,
-  gpsProjects,
 }: {
   children: React.ReactNode;
   email?: string;
   businessOwnerId: string;
-  ownerHourlyCost: number;
   activeTime: ActiveTime;
   newLeadCount: number;
   unreadNotificationCount: number;
-  gpsProjects: GpsProject[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -219,7 +214,6 @@ export function AppShell({
       </aside>
 
       <main className="app-main">
-        <GpsClockInAgent ownerId={businessOwnerId} ownerHourlyCost={ownerHourlyCost} projects={gpsProjects} hasActiveTime={Boolean(activeTime)} />
         {activeTime && (
           <div
             style={{
