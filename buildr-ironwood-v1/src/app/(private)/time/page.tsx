@@ -1,6 +1,5 @@
-import Link from "next/link";
+import { CleanTimeTracker } from "@/components/clean-time-tracker";
 import { PageHeader } from "@/components/page-header";
-import { TimeTracker } from "@/components/time-tracker";
 import { getBusinessAccess } from "@/lib/business-access";
 import { ACTIVE_PROJECT_STATUSES } from "@/lib/projects";
 import { createClient } from "@/lib/supabase/server";
@@ -13,7 +12,6 @@ export default async function TimePage({
   }>;
 }) {
   const query = await searchParams;
-
   const supabase = await createClient();
   const access = await getBusinessAccess(supabase);
 
@@ -25,21 +23,13 @@ export default async function TimePage({
   ] = await Promise.all([
     supabase
       .from("projects")
-      .select(
-        "id,name,status,project_address,jobsite_latitude,jobsite_longitude,geofence_radius_meters,gps_clock_in_enabled,estimates(title,estimate_number),customers(first_name,last_name)",
-      )
+      .select("id,name,status,project_address,jobsite_latitude,jobsite_longitude,geofence_radius_meters,gps_clock_in_enabled,estimates(title,estimate_number),customers(first_name,last_name)")
       .in("status", [...ACTIVE_PROJECT_STATUSES])
-      .order("created_at", {
-        ascending: false,
-      }),
-
+      .order("created_at", { ascending: false }),
     supabase
       .from("team_members")
-      .select(
-        "id,name,role,hourly_cost,active",
-      )
+      .select("id,name,role,hourly_cost,active")
       .order("name"),
-
     supabase
       .from("time_entries")
       .select(`
@@ -61,9 +51,7 @@ export default async function TimePage({
           estimates(title)
         )
       `)
-      .order("started_at", {
-        ascending: false,
-      })
+      .order("started_at", { ascending: false })
       .limit(100),
     access
       ? supabase
@@ -75,21 +63,14 @@ export default async function TimePage({
   ]);
 
   const activeProjects = projects ?? [];
-  const selectedProject = activeProjects.some(
-    (project) => project.id === query.project,
-  )
+  const selectedProject = activeProjects.some((project) => project.id === query.project)
     ? query.project
     : "";
 
   return (
     <div className="page-wrap">
-      <PageHeader
-        eyebrow="Job costing"
-        title="Time Tracker"
-        actions={<Link className="button button--outline" href="/settings/time">Time & GPS settings</Link>}
-      />
-
-      <TimeTracker
+      <PageHeader eyebrow="Job costing" title="Time Tracker" />
+      <CleanTimeTracker
         projects={activeProjects as any}
         teamMembers={(teamMembers ?? []) as any}
         entries={(entries ?? []) as any}
