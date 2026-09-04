@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { DecimalInputFix } from "@/components/decimal-input-fix";
 import { resolveBusinessAccess } from "@/lib/business-access";
 import { createClient } from "@/lib/supabase/server";
 
@@ -47,6 +48,7 @@ export default async function PrivateLayout({ children }: { children: React.Reac
       newLeadCount={newLeadCount ?? 0}
       unreadNotificationCount={unreadNotificationCount ?? 0}
     >
+      <DecimalInputFix />
       {children}
     </AppShell>
   );
