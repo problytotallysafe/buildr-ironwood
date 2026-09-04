@@ -66,6 +66,7 @@ export default async function TimePage({
   const selectedProject = activeProjects.some((project) => project.id === query.project)
     ? query.project
     : "";
+  const manager = access?.role === "owner" || access?.role === "admin";
 
   return (
     <div className="page-wrap">
@@ -76,8 +77,8 @@ export default async function TimePage({
         entries={(entries ?? []) as any}
         selectedProject={selectedProject}
         ownerHourlyCost={Number(settings?.owner_hourly_cost ?? 0)}
-        canTrackOwner={access?.role === "owner"}
-        canManageWorkers={access?.role === "owner" || access?.role === "admin"}
+        canTrackOwner={manager}
+        canManageWorkers={manager}
       />
     </div>
   );
