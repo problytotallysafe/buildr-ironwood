@@ -27,7 +27,7 @@ function unauthorized() {
   });
 }
 
-function ownTracksResponse(commands: unknown[]) {
+function ownTracksResponse(commands: unknown[] = []) {
   return NextResponse.json(commands, {
     status: 200,
     headers: { "Cache-Control": "no-store" },
@@ -116,7 +116,6 @@ export async function POST(request: Request) {
   const minimumVisitMinutes = Math.min(120, Math.max(1, Number(timeSettings?.android_minimum_visit_minutes ?? 5)));
   const maximumVisitMinutes = Math.min(24, Math.max(1, Number(timeSettings?.android_maximum_visit_hours ?? 18))) * 60;
   const ownerHourlyCost = Math.min(1000, Math.max(0, Number(timeSettings?.owner_hourly_cost ?? 0)));
-  const commands = buildOwnTracksWaypointCommand(projects);
 
   await admin
     .from("android_tracking_devices")
@@ -124,7 +123,14 @@ export async function POST(request: Request) {
     .eq("id", device.id);
 
   const transition = parseOwnTracksTransition(payload, now);
-  if (!transition) return ownTracksResponse(commands);
+
+  // OwnTracks expects waypoint commands when the phone performs a normal/manual
+  // publish. Do not send setWaypoints back in response to an enter/leave event:
+  // repeatedly re-importing active geofences during a transition can retrigger
+  // regions and prevent a clean leave event from reaching Buildr.
+  if (!transition) {
+    return ownTracksResponse(buildOwnTracksWaypointCommand(projects));
+  }
 
   const project = matchTransitionProject(projects, transition);
   const externalKey = ownTracksEventKey(device.id, transition);
@@ -145,7 +151,7 @@ export async function POST(request: Request) {
   if (eventError) {
     return NextResponse.json({ error: "Could not record location event" }, { status: 500 });
   }
-  if (!trackingEvent) return ownTracksResponse(commands);
+  if (!trackingEvent) return ownTracksResponse();
 
   if (!project) {
     await notifyReview(
@@ -154,10 +160,10 @@ export async function POST(request: Request) {
       "Android visit needs review",
       "OwnTracks reported a jobsite transition that did not match an enabled active Buildr project.",
     );
-    return ownTracksResponse(commands);
+    return ownTracksResponse();
   }
 
-  if (transition.event === "enter") return ownTracksResponse(commands);
+  if (transition.event === "enter") return ownTracksResponse();
 
   const { data: arrival } = await admin
     .from("android_tracking_events")
@@ -181,7 +187,7 @@ export async function POST(request: Request) {
       "Android departure needs review",
       `${project.estimates?.title || project.name || "A Buildr job"} reported a departure without a matching arrival.`,
     );
-    return ownTracksResponse(commands);
+    return ownTracksResponse();
   }
 
   const { data: claimedArrival } = await admin
@@ -196,7 +202,7 @@ export async function POST(request: Request) {
     await admin.from("android_tracking_events")
       .update({ status: "unmatched" })
       .eq("id", trackingEvent.id);
-    return ownTracksResponse(commands);
+    return ownTracksResponse();
   }
 
   const startedAt = new Date(arrival.occurred_at);
@@ -214,7 +220,7 @@ export async function POST(request: Request) {
       "Android visit duration needs review",
       `${project.estimates?.title || project.name || "A Buildr job"} reported ${durationMinutes} minutes on site, so Buildr did not create an automatic entry.`,
     );
-    return ownTracksResponse(commands);
+    return ownTracksResponse();
   }
 
   const { data: overlaps } = await admin
@@ -236,7 +242,7 @@ export async function POST(request: Request) {
       "Android visit overlaps existing time",
       `${project.estimates?.title || project.name || "A Buildr job"} matched an existing time entry, so Buildr avoided a duplicate.`,
     );
-    return ownTracksResponse(commands);
+    return ownTracksResponse();
   }
 
   const sourceKey = `owntracks:${device.id}:${arrival.id}:${trackingEvent.id}`;
@@ -274,9 +280,10 @@ export async function POST(request: Request) {
         admin.from("android_tracking_events").update({ status: "paired", paired_event_id: trackingEvent.id, time_entry_id: existingTime.id }).eq("id", arrival.id),
         admin.from("android_tracking_events").update({ status: "paired", paired_event_id: arrival.id, time_entry_id: existingTime.id }).eq("id", trackingEvent.id),
       ]);
-      return ownTracksResponse(commands);
+      return ownTracksResponse();
     }
   }
+
   if (timeError || !timeEntry) {
     await Promise.all([
       admin.from("android_tracking_events").update({ status: "error" }).eq("id", arrival.id),
@@ -296,5 +303,5 @@ export async function POST(request: Request) {
     admin.from("android_tracking_events").update({ status: "paired", paired_event_id: arrival.id, time_entry_id: timeEntry.id }).eq("id", trackingEvent.id),
   ]);
 
-  return ownTracksResponse(commands);
+  return ownTracksResponse();
 }
