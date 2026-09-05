@@ -34,28 +34,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       + (callbackCharges ?? []).reduce((sum, item) => sum + Number(item.homeowner_amount), 0);
     const paid = (payments ?? []).reduce((sum, item) => sum + Number(item.amount), 0);
     const balance = Math.max(0, total - paid);
+    const paidInFull = balance <= 0.005 && paid > 0;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
     const invoiceUrl = `${appUrl}/invoice/${estimate.public_token}?via=text`;
-    const message = `Hi ${customer?.first_name || "there"}, your Ironwood Remodeling final invoice for ${estimate.title || project.name} is ready. Balance due: ${money(balance)}. View it here: ${invoiceUrl}`;
+    const message = paidInFull
+      ? `Hi ${customer?.first_name || "there"}, thank you for your final payment to Ironwood Remodeling. ${estimate.title || project.name} is paid in full (${money(total)}). Your receipt: ${invoiceUrl}`
+      : `Hi ${customer?.first_name || "there"}, your Ironwood Remodeling final invoice for ${estimate.title || project.name} is ready. Balance due: ${money(balance)}. View it here: ${invoiceUrl}`;
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
     const from = process.env.TWILIO_FROM_NUMBER;
     let mode = "composer";
-    let eventType = "invoice_text_composer_opened";
-    let metadata: Record<string, unknown> = { project_id: id, phone, balance, invoice_url: invoiceUrl, delivery: "device_composer" };
+    let eventType = paidInFull ? "receipt_text_composer_opened" : "invoice_text_composer_opened";
+    let metadata: Record<string, unknown> = { project_id: id, phone, balance, paid, total, invoice_url: invoiceUrl, delivery: "device_composer" };
 
     if (accountSid && authToken && from) {
       const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, { method: "POST", headers: { Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ To: phone, From: from, Body: message }) });
       const result = await response.json();
       if (!response.ok) return NextResponse.json({ error: result.message || "The text message could not be sent." }, { status: 500 });
       mode = "sent";
-      eventType = "invoice_sent_via_text";
+      eventType = paidInFull ? "receipt_sent_via_text" : "invoice_sent_via_text";
       metadata = { ...metadata, delivery: "twilio", message_sid: result.sid };
     }
 
     await supabase.from("estimate_events").insert({ owner_id: user.id, estimate_id: estimate.id, event_type: eventType, metadata });
-    return NextResponse.json({ ok: true, mode, phone, smsUrl: `sms:${phone}?body=${encodeURIComponent(message)}` });
+    return NextResponse.json({ ok: true, mode, phone, document: paidInFull ? "receipt" : "invoice", smsUrl: `sms:${phone}?body=${encodeURIComponent(message)}` });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not prepare the invoice text." }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not prepare the message." }, { status: 500 });
   }
 }
