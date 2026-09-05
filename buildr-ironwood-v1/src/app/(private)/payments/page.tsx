@@ -13,6 +13,7 @@ async function refreshPaymentPaths(supabase: Awaited<ReturnType<typeof createCli
   revalidatePath("/today");
   revalidatePath("/dashboard");
   revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}/invoice`);
 }
 
 async function savePayment(formData: FormData) {
@@ -80,7 +81,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
     {selectedProject && <div className="payment-filter-bar"><Link href={`/projects/${selectedProject.id}`}>← Back to project</Link><Link href="/payments">Show all payments</Link></div>}
     <div className="detail-grid detail-grid--wide">
       <section className="panel"><h2>Payment history</h2><div className="table-wrap"><table><thead><tr><th>Date</th><th>Project</th><th>Milestone</th><th>Method</th><th>Amount</th><th></th></tr></thead><tbody>
-        {(payments ?? []).map((payment: any) => <tr key={payment.id}><td>{new Date(payment.received_at).toLocaleDateString()}</td><td><Link className="table-link" href={`/projects/${payment.project_id}`}>{payment.projects?.name}</Link><small>{payment.projects?.customers ? `${payment.projects.customers.first_name} ${payment.projects.customers.last_name}` : ""}</small></td><td>{payment.estimate_payment_milestones?.title || "Unassigned"}</td><td>{payment.payment_method}</td><td>{money(payment.amount)}</td><td>{canManage && <div className="button-row"><Link className="button button--outline button--small" href={`/payments?edit=${payment.id}${query.project ? `&project=${query.project}` : ""}`}>Edit</Link><form action={deletePayment}><input type="hidden" name="id" value={payment.id}/><button className="button button--outline button--small" type="submit">Delete</button></form></div>}</td></tr>)}
+        {(payments ?? []).map((payment: any) => <tr key={payment.id}><td>{new Date(payment.received_at).toLocaleDateString()}</td><td><Link className="table-link" href={`/projects/${payment.project_id}`}>{payment.projects?.name}</Link><small>{payment.projects?.customers ? `${payment.projects.customers.first_name} ${payment.projects.customers.last_name}` : ""}</small></td><td>{payment.estimate_payment_milestones?.title || "Unassigned"}</td><td>{payment.payment_method}</td><td>{money(payment.amount)}</td><td><div className="button-row"><Link className="button button--outline button--small" href={`/projects/${payment.project_id}/invoice`}>Invoice / receipt</Link>{canManage && <><Link className="button button--outline button--small" href={`/payments?edit=${payment.id}${query.project ? `&project=${query.project}` : ""}`}>Edit</Link><form action={deletePayment}><input type="hidden" name="id" value={payment.id}/><button className="button button--outline button--small" type="submit">Delete</button></form></>}</div></td></tr>)}
         {!payments?.length && <tr><td colSpan={6} className="empty-cell">No payments recorded.</td></tr>}
       </tbody></table></div></section>
       <aside className="panel"><h2>{editing ? "Edit payment" : "Record payment"}</h2>{canManage ? <form action={savePayment} className="stack">
